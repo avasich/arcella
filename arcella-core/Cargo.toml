@@ -1,7 +1,7 @@
 [package]
 name = "arcella-core"
 version = "0.1.0"
-rust-version = "1.75"
+rust-version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,10 +11,10 @@ keywords = ["wasm", "webassembly", "runtime", "modular", "component-model"]
 categories = ["wasm", "development-tools", "embedded"]
 
 [dependencies]
-arcella-types = { workspace = true }
+arcella-types = { path = "../arcella-types" }
 ministate = { workspace = true }
 derive_builder = { workspace = true }
-dirs =  { workspace = true }
+dirs = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 ordered-float = { workspace = true }
@@ -25,13 +25,11 @@ time = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-toml_edit =  { workspace = true }
+toml_edit = { workspace = true }
 tracing = { workspace = true }
 wasmtime = { workspace = true }
-uuid =  { workspace = true }
+uuid = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
-
-

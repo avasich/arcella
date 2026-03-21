@@ -1,16 +1,17 @@
 [package]
 name = "arcella"
 version = "0.2.6"
+rust-version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-arcella-core = { path = "../arcella-core"}
-arcella-types = { workspace = true }
+arcella-core = { path = "../arcella-core" }
+arcella-types = { path = "../arcella-types" }
 clap = { workspace = true }
-#futures = { workspace = true }
+# futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
@@ -19,8 +20,8 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
-#wasmtime = { workspace = true }
-#wat = { workspace = true }
+# wasmtime = { workspace = true }
+# wat = { workspace = true }
 
 [[test]]
 name = "integration_tests"

@@ -588,7 +588,7 @@ fn insert_nested_rec(table: &mut Table, parts: &[&str], value: TomlValue) {
     } else {
         let key = parts[0].to_string();
         let entry = table.entry(key).or_insert_with(|| toml::Value::Table(Table::new()));
-        if let toml::Value::Table(ref mut subtable) = entry {
+        if let toml::Value::Table(subtable) = entry {
             insert_nested_rec(subtable, &parts[1..], value);
         }
         // Ignore type conflicts for MVP (e.g., if key already exists as non-table)
