@@ -8,9 +8,9 @@
 // except according to those terms.
 
 use std::path::PathBuf;
-use thiserror::Error;
 
 use arcella_types::ArcellaTypeError;
+use thiserror::Error;
 
 /// Result type alias for `arcella-wasmtime` operations.
 pub type ArcellaWasmtimeResult<T> = std::result::Result<T, ArcellaWasmtimeError>;
@@ -27,14 +27,11 @@ pub enum ArcellaWasmtimeError {
 
     /// IO error with associated path for better diagnostics
     #[error("I/O error at {path:?}: {source}")]
-    IoWithPath {
-        source: std::io::Error,
-        path: PathBuf,
-    },
+    IoWithPath { source: std::io::Error, path: PathBuf },
 
     #[error("Arcella types error: {0}")]
-    ArcellaTypeError (#[from] ArcellaTypeError),    
-    
+    ArcellaTypeError(#[from] ArcellaTypeError),
+
     /// Invalid or missing module manifest.
     #[error("Manifest error: {0}")]
     Manifest(String),
@@ -42,7 +39,6 @@ pub enum ArcellaWasmtimeError {
     /// Wasmtime-specific error.
     #[error("Wasmtime error: {0}")]
     Wasmtime(#[from] wasmtime::Error),
-
 }
 
 impl From<String> for ArcellaWasmtimeError {

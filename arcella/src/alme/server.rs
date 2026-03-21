@@ -27,19 +27,17 @@
 //! in order. The server is designed for local administration only and is not
 //! intended for network exposure.
 
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, WriteHalf};
-use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{RwLock, broadcast};
-use tokio::time::{timeout, Duration as TokioDuration};
+use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 
 use arcella_types::alme::{AlmeRequest, AlmeResponse};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, WriteHalf},
+    net::{UnixListener, UnixStream},
+    sync::{RwLock, broadcast},
+    time::{Duration as TokioDuration, timeout},
+};
 
-use crate::runtime::ArcellaRuntime;
-use crate::{ArcellaError, ArcellaResult};
+use crate::{ArcellaError, ArcellaResult, runtime::ArcellaRuntime};
 
 /// Maximum allowed length of an incoming ALME request in bytes.
 /// Requests exceeding this limit will be rejected to prevent resource exhaustion.
@@ -57,7 +55,7 @@ static MAX_READER_TIMEOUT: u64 = 60; // seconds
 /// The socket file is created with permissions `0o600` (read/write for owner only) for security.
 ///
 /// A graceful shutdown can be initiated by calling [crate::alme::AlmeServerHandle::shutdown],
-/// which signals the server to stop accepting new connections, notifies all active connection 
+/// which signals the server to stop accepting new connections, notifies all active connection
 /// handlers to terminate, and removes the Unix socket file once the server loop exits.
 ///  
 /// # Arguments
@@ -75,10 +73,9 @@ static MAX_READER_TIMEOUT: u64 = 60; // seconds
 /// - The socket cannot be bound (e.g., due to permission issues).
 /// - The socket file permissions cannot be set
 pub async fn spawn_server(
-    socket_path: PathBuf, 
+    socket_path: PathBuf,
     runtime: Arc<RwLock<ArcellaRuntime>>,
 ) -> ArcellaResult<super::AlmeServerHandle> {
-
     if socket_path.exists() {
         if let Err(e) = fs::remove_file(&socket_path) {
             tracing::error!("Failed to remove stale socket {:?}: {}", socket_path, e);
@@ -120,7 +117,7 @@ pub async fn spawn_server(
 ///
 /// The loop is resilient to transient client or I/O errors but will exit
 /// on listener errors or explicit shutdown.
-/// 
+///
 /// # Arguments
 ///
 /// * `listener` - The bound `UnixListener` to accept connections from.
@@ -161,7 +158,6 @@ async fn run_server_loop(
     }
 
     Ok(())
-												   
 }
 
 /// Handles a single ALME client connection for its entire lifetime.
@@ -179,18 +175,17 @@ async fn run_server_loop(
 /// - A global shutdown signal is received via `shutdown_rx`.
 ///
 /// Empty lines are ignored (no response is sent).
-/// 
+///
 /// # Arguments
 ///
 /// * `stream` - The connected Unix stream to communicate with the client.
 /// * `runtime` - Shared access to the Arcella runtime for executing commands.
 /// * `shutdown_rx` - Receiver for global shutdown signals.
 async fn handle_connection(
-    stream: UnixStream, 
+    stream: UnixStream,
     runtime: Arc<RwLock<ArcellaRuntime>>,
     mut shutdown_rx: broadcast::Receiver<()>,
 ) -> ArcellaResult<()> {
-
     let (reader, mut writer) = tokio::io::split(stream);
     let mut reader = BufReader::new(reader);
     let mut buffer = String::new();
@@ -247,18 +242,16 @@ async fn handle_connection(
                 tracing::error!("{}", message);
                 send_response(&mut writer, &resp).await?;
                 continue;
-            }
+            },
         };
         tracing::trace!("Get request: {:?}", request);
 
         let response = super::commands::dispatch_command(&request, &runtime).await;
 
         send_response(&mut writer, &response).await?;
-
     };
 
     result
-
 }
 
 /// Serializes an [`AlmeResponse`] to JSON and writes it to the client stream.
@@ -266,7 +259,7 @@ async fn handle_connection(
 /// A newline (`\n`) is appended to ensure line-oriented parsing on the client side.
 /// If the write fails (e.g., because the client disconnected), the error is returned
 /// so the connection handler can terminate gracefully.
-/// 
+///
 /// # Arguments
 ///
 /// * `stream` - The writable half of the Unix stream to send the response to.
@@ -276,8 +269,7 @@ async fn send_response(
     response: &AlmeResponse,
 ) -> ArcellaResult<()> {
     tracing::trace!("Send response");
-    let mut json = serde_json::to_vec(response)
-        .map_err(|e| ArcellaError::Json(e))?;
+    let mut json = serde_json::to_vec(response).map_err(|e| ArcellaError::Json(e))?;
     json.push(b'\n');
     let _ = stream.write_all(&json).await.map_err(|e| {
         tracing::error!("Failed to send response: {}", e);
@@ -505,7 +497,7 @@ mod tests {
         assert!(resp3.success);
         assert!(resp3.data.is_some());
         let modules: Vec<serde_json::Value> = serde_json::from_value(resp3.data.unwrap()).unwrap();
-        
+
         // Close socket
         drop(writer);
         drop(reader);

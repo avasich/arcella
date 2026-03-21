@@ -17,18 +17,14 @@
 //! The entry point is [`dispatch_command`], which is called by the ALME server
 //! for every valid incoming request.
 
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::{path::PathBuf, sync::Arc};
 
 use arcella_types::alme::{AlmeCommand, AlmeRequest, AlmeResponse};
+use tokio::sync::RwLock;
 
 use crate::{
     log,
-    runtime::{
-        ArcellaExecutionContext,
-        ArcellaRuntime,
-    },
+    runtime::{ArcellaExecutionContext, ArcellaRuntime},
 };
 
 /// Dispatches an ALME command to the appropriate handler function.
@@ -60,8 +56,10 @@ pub async fn dispatch_command(
         AlmeCommand::ModuleList => handle_module_list(runtime).await,
         AlmeCommand::ModuleInstall { path } => handle_module_install(runtime, path).await,
         AlmeCommand::ModuleDeploy { file } => handle_module_deploy(runtime, file).await,
-        AlmeCommand::ModuleStart { deployment_id } => handle_module_start(runtime, deployment_id).await,
-        AlmeCommand::ModuleStop { deployment_id } => handle_module_stop(runtime, deployment_id).await,
+        AlmeCommand::ModuleStart { deployment_id } =>
+            handle_module_start(runtime, deployment_id).await,
+        AlmeCommand::ModuleStop { deployment_id } =>
+            handle_module_stop(runtime, deployment_id).await,
         // ... other command
         _ => AlmeResponse::error(&format!("Unknown command: {:?}", request.command.clone())),
     }
@@ -100,21 +98,20 @@ fn handle_ping() -> AlmeResponse {
 ///
 /// Returns an error response if the runtime status cannot be retrieved
 /// (e.g., due to a poisoned lock).
-async fn handle_status(
-    runtime: &Arc<RwLock<ArcellaRuntime>>,
-) -> AlmeResponse {
-    
+async fn handle_status(runtime: &Arc<RwLock<ArcellaRuntime>>) -> AlmeResponse {
     let runtime_guard = runtime.read().await;
 
-    let runtime_status = match runtime_guard.status(){
+    let runtime_status = match runtime_guard.status() {
         Ok(status) => status,
         Err(e) => {
             tracing::error!("{}", e);
-            return AlmeResponse::error(&e.to_string())
-        }
+            return AlmeResponse::error(&e.to_string());
+        },
     };
 
-    let start_time_rfc3339 = runtime_status.start_time.format(&time::format_description::well_known::Rfc3339)
+    let start_time_rfc3339 = runtime_status
+        .start_time
+        .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "<invalid-timestamp>".to_string());
 
     let data = serde_json::json!({
@@ -128,7 +125,6 @@ async fn handle_status(
 
     tracing::debug!("Command status received");
     AlmeResponse::success("Arcella runtime is active", Some(data))
-
 }
 
 /// Handles the `"log:tail"` ALME command.
@@ -147,7 +143,6 @@ async fn handle_status(
 /// of log strings (most recent first). Returns an empty array if the buffer is
 /// disabled or uninitialized.
 async fn handle_log_tail(n: usize) -> AlmeResponse {
-
     let lines = log::get_recent_logs(n);
 
     let data = serde_json::json!({
@@ -174,75 +169,62 @@ async fn handle_log_tail(n: usize) -> AlmeResponse {
 /// # TODO
 ///
 /// Implement actual module enumeration by querying the runtime's module registry.
-async fn handle_module_list(
-    _runtime: &Arc<RwLock<ArcellaRuntime>>,
-) -> AlmeResponse {
+async fn handle_module_list(_runtime: &Arc<RwLock<ArcellaRuntime>>) -> AlmeResponse {
     // TODO: реализовать
     tracing::debug!("Command module:list received");
     AlmeResponse::success("Module list", Some(serde_json::json!([])))
 }
 
-async fn handle_module_install(
-    runtime: &Arc<RwLock<ArcellaRuntime>>,
-    path: &str,
-) -> AlmeResponse {
+async fn handle_module_install(runtime: &Arc<RwLock<ArcellaRuntime>>, path: &str) -> AlmeResponse {
     // 1. Briefly acquire a read lock to get Arc references
     let ctx = match ArcellaExecutionContext::from_runtime(&runtime).await {
         Ok(ctx) => ctx,
         Err(e) => {
             tracing::error!("Failed to create execution context: {}", e);
             return AlmeResponse::error(&e.to_string());
-        }
+        },
     };
 
     let path_buf = PathBuf::from(path.trim());
 
     // 2. Do the heavy lifting without locking the runtime
-    let module_id = match ArcellaRuntime::install_module_from_path(
-        ctx,
-        &path_buf,
-    ).await {
+    let module_id = match ArcellaRuntime::install_module_from_path(ctx, &path_buf).await {
         Ok(id) => id,
         Err(e) => return AlmeResponse::error(&e.to_string()),
     };
 
     let data = serde_json::json!({
         "module_id": module_id
-    });    
+    });
 
     let msg = format!("Module {} is installed", module_id);
     tracing::debug!(msg);
     AlmeResponse::success(&msg, Some(data))
 }
 
-async fn handle_module_deploy(
-    runtime: &Arc<RwLock<ArcellaRuntime>>,
-    path: &str,
-) -> AlmeResponse {
+async fn handle_module_deploy(runtime: &Arc<RwLock<ArcellaRuntime>>, path: &str) -> AlmeResponse {
     // 1. Briefly acquire a read lock to get Arc references
     let ctx = match ArcellaExecutionContext::from_runtime(&runtime).await {
         Ok(ctx) => ctx,
         Err(e) => {
             tracing::error!("Failed to create execution context: {}", e);
             return AlmeResponse::error(&e.to_string());
-        }
+        },
     };
 
     let path_buf = PathBuf::from(path.trim());
 
     // 2. Do the heavy lifting without locking the runtime
-    let (module_id, deployment_id) = match ArcellaRuntime::deploy_module_from_path(
-        ctx,
-        &path_buf,
-    ).await {
-        Ok(id) => id,
-        Err(e) => return AlmeResponse::error(&e.to_string()),
-    };
+    let (module_id, deployment_id) =
+        match ArcellaRuntime::deploy_module_from_path(ctx, &path_buf).await {
+            Ok(id) => id,
+            Err(e) => return AlmeResponse::error(&e.to_string()),
+        };
 
     let data = serde_json::json!({
         "module_id": module_id,
         "deployment_id": deployment_id
-    });    
+    });
 
     let msg = format!("Module {} is deployed as {}", module_id, deployment_id);
     tracing::debug!(msg);
@@ -253,21 +235,20 @@ async fn handle_module_start(
     runtime: &Arc<RwLock<ArcellaRuntime>>,
     deployment_id: &str,
 ) -> AlmeResponse {
-
     let mut runtime_guard = runtime.write().await;
 
     let module_status = match runtime_guard.module_start(deployment_id).await {
         Ok(status) => status,
         Err(e) => {
             tracing::error!("{}", e);
-            return AlmeResponse::error(&e.to_string())
-        }
+            return AlmeResponse::error(&e.to_string());
+        },
     };
 
     let data = serde_json::json!({
         "deployment_id": deployment_id,
         "status": module_status,
-    });    
+    });
 
     let msg = format!("Module {} is started", deployment_id);
     tracing::debug!(msg);
@@ -278,21 +259,20 @@ async fn handle_module_stop(
     runtime: &Arc<RwLock<ArcellaRuntime>>,
     deployment_id: &str,
 ) -> AlmeResponse {
-
     let mut runtime_guard = runtime.write().await;
 
     let module_status = match runtime_guard.module_stop(deployment_id).await {
         Ok(status) => status,
         Err(e) => {
             tracing::error!("{}", e);
-            return AlmeResponse::error(&e.to_string())
-        }
+            return AlmeResponse::error(&e.to_string());
+        },
     };
 
     let data = serde_json::json!({
         "deployment_id": deployment_id,
         "status": module_status,
-    });    
+    });
 
     let msg = format!("Module {} is stopped", deployment_id);
     tracing::debug!(msg);

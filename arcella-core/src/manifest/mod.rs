@@ -24,25 +24,21 @@
 //!    instances to run — target worker group, replica count, and runtime overrides.
 //!    This file is **created by administrators** for specific deployment scenarios.
 
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::OnceLock,
+};
+
+use arcella_types::{manifest::ComponentManifest, module_id::ModuleId};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::OnceLock;
-use wasmtime::{
-    Engine,
-};
+use wasmtime::Engine;
 
-use arcella_types::{
-    module_id::ModuleId,
-    manifest::ComponentManifest,
+use crate::{
+    ArcellaError,
+    ArcellaResult,
+    wasmtime::{ArcellaWasmtimeError, manifest},
 };
-
-use crate::wasmtime::{
-    ArcellaWasmtimeError,
-    manifest,
-};
-
-use crate::{ArcellaError, ArcellaResult};
 
 // ================================
 // 1. COMPONENT MANIFEST (portable)
@@ -62,15 +58,15 @@ pub fn load_component_manifest_from_toml(path: &Path) -> ArcellaResult<Option<Co
     }
 
     let content = std::fs::read_to_string(path)
-        .map_err(|e| ArcellaError::IoWithPath { source: e, path: path.into() })?; 
+        .map_err(|e| ArcellaError::IoWithPath { source: e, path: path.into() })?;
 
-    let wrapper: ComponentManifestWrapper = toml::from_str(&content)
-        .map_err(|e| ArcellaWasmtimeError::Manifest(e.to_string()))?;
+    let wrapper: ComponentManifestWrapper =
+        toml::from_str(&content).map_err(|e| ArcellaWasmtimeError::Manifest(e.to_string()))?;
 
     let manifest = wrapper.component;
     manifest.validate()?;
 
-    Ok(Some(manifest))                      
+    Ok(Some(manifest))
 }
 
 // ==================================
@@ -84,7 +80,7 @@ pub fn load_component_manifest_from_toml(path: &Path) -> ArcellaResult<Option<Co
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeploymentTemplate {
     /// Recommended isolation strategy
-    /// 
+    ///
     /// Determines whether the module runs in the main tokio thread (`Main`)
     /// or in a separate `arcella-worker` process (`Worker`).
     pub isolation: IsolationMode,
@@ -137,13 +133,13 @@ impl DeploymentTemplate {
     /// Loads a deployment template from a TOML file.
     pub fn from_file(path: &Path) -> ArcellaResult<Self> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| ArcellaError::IoWithPath{source: e, path: path.into()})?;
+            .map_err(|e| ArcellaError::IoWithPath { source: e, path: path.into() })?;
         let wrapper: DeploymentTemplateWrapper =
             toml::from_str(&content).map_err(|e| ArcellaWasmtimeError::Manifest(e.to_string()))?;
-        
+
         let template = wrapper.deployment;
         template.validate()?;
-        
+
         Ok(template)
     }
 
@@ -159,16 +155,13 @@ impl DeploymentTemplate {
 
     /// Validates template constraints.
     pub fn validate(&self) -> ArcellaResult<()> {
-        validate_isolation_constraints(
-            &self.isolation,
-            self.trusted,
-            self.r#async,
-        )?;
+        validate_isolation_constraints(&self.isolation, self.trusted, self.r#async)?;
 
         if self.group.is_some() && self.isolation != IsolationMode::Worker {
             return Err(ArcellaWasmtimeError::Manifest(
                 "Group can only be specified for worker isolation".into(),
-            ).into());
+            )
+            .into());
         }
 
         if let Some(ref group) = self.group {
@@ -213,35 +206,31 @@ impl DeploymentSpec {
     /// Loads a deployment specification from a TOML file.
     pub fn from_file(path: &Path) -> ArcellaResult<Self> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| ArcellaError::IoWithPath{source: e, path: path.into()})?;
-        
+            .map_err(|e| ArcellaError::IoWithPath { source: e, path: path.into() })?;
+
         let wrapper: DeploymentSpecWrapper =
             toml::from_str(&content).map_err(|e| ArcellaWasmtimeError::Manifest(e.to_string()))?;
-        
+
         let spec = wrapper.deployment;
         spec.validate()?;
-        
+
         Ok(spec)
     }
 
     /// Validates deployment specification.
     pub fn validate(&self) -> ArcellaResult<()> {
         if self.group.is_empty() {
-            return Err(ArcellaWasmtimeError::Manifest(
-                "Group must not be empty".into()
-            ).into());
+            return Err(ArcellaWasmtimeError::Manifest("Group must not be empty".into()).into());
         }
 
         if self.replicas == 0 {
-            return Err(ArcellaWasmtimeError::Manifest(
-                "Replicas must be at least 1".into()
-            ).into());
+            return Err(ArcellaWasmtimeError::Manifest("Replicas must be at least 1".into()).into());
         }
 
         Ok(())
     }
 
-     /// Creates a full deployment by combining template and overrides.
+    /// Creates a full deployment by combining template and overrides.
     ///
     /// The `group` always comes from the deployment spec (not the template).
     /// If no template is provided, safe defaults are used.
@@ -280,17 +269,17 @@ impl DeploymentSpec {
 pub struct DeploymentOverrides {
     /// Override isolation mode
     pub isolation: Option<IsolationMode>,
-    
+
     /// Override trust level
     pub trusted: Option<bool>,
-    
+
     /// Override async mode
     #[serde(rename = "async")]
     pub r#async: Option<bool>,
-    
+
     /// Override startup configuration
     pub startup: Option<StartupConfig>,
-    
+
     /// Override resource requirements
     pub resources: Option<ResourceRequirements>,
 }
@@ -310,16 +299,13 @@ pub struct FullDeployment {
 
 impl FullDeployment {
     pub fn validate(&self) -> ArcellaResult<()> {
-        validate_isolation_constraints(
-            &self.isolation,
-            self.trusted,
-            self.r#async
-        )?;
+        validate_isolation_constraints(&self.isolation, self.trusted, self.r#async)?;
 
         if self.isolation == IsolationMode::Main && self.replicas != 1 {
             return Err(ArcellaWasmtimeError::Manifest(
-                "Main isolation supports only 1 replica".into()
-            ).into());
+                "Main isolation supports only 1 replica".into(),
+            )
+            .into());
         }
 
         Ok(())
@@ -384,11 +370,11 @@ pub struct ResourceRequirements {
     /// Maximum memory in MB
     #[serde(default)]
     pub memory_mb: Option<u32>,
-    
+
     /// Maximum fuel units
     #[serde(default)]
     pub fuel: Option<u64>,
-    
+
     /// CPU shares (relative weight)
     #[serde(default)]
     pub cpu_shares: Option<u32>,
@@ -398,16 +384,14 @@ impl ResourceRequirements {
     pub fn validate(&self) -> ArcellaResult<()> {
         if let Some(mem) = self.memory_mb {
             if mem == 0 {
-                return Err(ArcellaWasmtimeError::Manifest(
-                    "Memory must be at least 1 MB".into()
-                ).into());
+                return Err(
+                    ArcellaWasmtimeError::Manifest("Memory must be at least 1 MB".into()).into()
+                );
             }
         }
         if let Some(fuel) = self.fuel {
             if fuel == 0 {
-                return Err(ArcellaWasmtimeError::Manifest(
-                    "Fuel must be at least 1".into()
-                ).into());
+                return Err(ArcellaWasmtimeError::Manifest("Fuel must be at least 1".into()).into());
             }
         }
         Ok(())
@@ -427,10 +411,12 @@ pub struct ComponentBundle {
 }
 
 impl ComponentBundle {
-
     /// Loads a complete component bundle from a .wasm file
-    pub fn from_wasm_and_toml(engine: &Engine, wasm_path: &Path, toml_path: &Path) -> ArcellaResult<Self> {
-
+    pub fn from_wasm_and_toml(
+        engine: &Engine,
+        wasm_path: &Path,
+        toml_path: &Path,
+    ) -> ArcellaResult<Self> {
         let manifest = load_component_manifest_from_toml(toml_path)?;
 
         let component = if let Some(m) = manifest {
@@ -440,7 +426,7 @@ impl ComponentBundle {
             // (Requires arcella_wasmtime crate)
             manifest::component_manifest_from_wasm(engine, wasm_path)?
         };
-                
+
         let template = DeploymentTemplate::from_template_toml(wasm_path)?;
 
         let bundle = Self {
@@ -452,14 +438,12 @@ impl ComponentBundle {
         bundle.validate()?;
 
         Ok(bundle)
-
     }
 
     /// Loads a complete component bundle from a .wasm file
     pub fn from_wasm_path(engine: &Engine, wasm_path: &Path) -> ArcellaResult<Self> {
-
         let component = manifest::component_manifest_from_wasm(engine, wasm_path)?;
-                
+
         let template = DeploymentTemplate::from_template_toml(wasm_path)?;
 
         let bundle = Self {
@@ -471,13 +455,12 @@ impl ComponentBundle {
         bundle.validate()?;
 
         Ok(bundle)
-
     }
 
     /// Validates the entire bundle for consistency
     pub fn validate(&self) -> ArcellaResult<()> {
         self.component.validate()?;
-        
+
         if let Some(template) = &self.template {
             template.validate()?;
             validate_compatibility(&self.component, template)?;
@@ -496,12 +479,12 @@ pub fn validate_compatibility(
     component: &ComponentManifest,
     deployment: &DeploymentTemplate,
 ) -> ArcellaResult<()> {
-
     // Check if async component is deployed in sync mode
     if !component.exports.is_empty() && !deployment.r#async {
         return Err(ArcellaWasmtimeError::Manifest(
-            "Component exports but deployment is sync".into()
-        ).into());
+            "Component exports but deployment is sync".into(),
+        )
+        .into());
     }
 
     Ok(())
@@ -513,14 +496,15 @@ fn validate_isolation_constraints(
     r#async: bool,
 ) -> ArcellaResult<()> {
     if trusted && *isolation != IsolationMode::Main {
-        return Err(ArcellaWasmtimeError::Manifest(
-            "Only 'main' isolation can be trusted".into()
-        ).into());
+        return Err(
+            ArcellaWasmtimeError::Manifest("Only 'main' isolation can be trusted".into()).into()
+        );
     }
     if *isolation == IsolationMode::Main && !r#async {
         return Err(ArcellaWasmtimeError::Manifest(
-            "'main' isolation requires async = true".into()
-        ).into());
+            "'main' isolation requires async = true".into(),
+        )
+        .into());
     }
     Ok(())
 }
@@ -532,9 +516,11 @@ fn validate_isolation_constraints(
 
 #[cfg(test)]
 pub mod test_utils {
-    use super::*;
     use std::fs;
+
     use tempfile::TempDir;
+
+    use super::*;
 
     #[cfg(test)]
     pub fn create_test_manifest() -> Option<ComponentManifest> {
@@ -553,14 +539,15 @@ pub mod test_utils {
         fs::write(&toml_path, toml_content).unwrap();
         load_component_manifest_from_toml(&toml_path).unwrap()
     }
-
-} 
+}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn test_component_manifest_valid() {
@@ -636,7 +623,7 @@ mod tests {
         "#;
         let err = toml::from_str::<ComponentManifestWrapper>(toml).unwrap_err();
         assert!(err.to_string().contains("Invalid module ID name"));
-    } 
+    }
 
     #[test]
     fn test_load_component_manifest_from_toml() {
@@ -667,6 +654,5 @@ mod tests {
         let fake_path = Path::new("/nonexistent/component.toml");
         let result = load_component_manifest_from_toml(fake_path).unwrap();
         assert!(result.is_none());
-    }       
-    
+    }
 }

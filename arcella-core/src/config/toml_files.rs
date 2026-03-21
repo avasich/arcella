@@ -7,14 +7,16 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
+
 use futures::future;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use tokio::fs;
 
+use super::{ConfigLoadWarning, types::TEMPLATE_TOML_SUFFIX};
 use crate::{ArcellaError, ArcellaResult};
-use super::ConfigLoadWarning;
-use super::types::TEMPLATE_TOML_SUFFIX;
 
 /// Checks if a path represents a regular file with a `.toml` extension
 /// but *not* a `.template.toml` extension.
@@ -35,7 +37,6 @@ use super::types::TEMPLATE_TOML_SUFFIX;
 ///
 /// `true` if the path is a valid TOML file according to the criteria, `false` otherwise.
 pub fn is_valid_toml_file_path(path: &Path) -> bool {
-
     // 1. Get the file name if it exists
     let file_name = match path.file_name() {
         Some(name) => name,
@@ -52,7 +53,7 @@ pub fn is_valid_toml_file_path(path: &Path) -> bool {
     // 3. Defensive: reject names containing ".."
     if file_name.contains("..") {
         return false;
-    }    
+    }
 
     // 4. Case-insensitive ASCII check for extensions
     let lower = file_name.to_ascii_lowercase();
@@ -89,20 +90,27 @@ pub fn is_valid_toml_file_path(path: &Path) -> bool {
 /// - `Err(ArcellaError)` if an I/O error occurs while accessing the path.
 pub async fn find_toml_files_in_dir(dir_path: &Path) -> ArcellaResult<Option<Vec<PathBuf>>> {
     // Check that the path exists and is a directory
-    let metadata = fs::metadata(dir_path).await
-        .map_err(|e| ArcellaError::IoWithPath { source: e, path: dir_path.to_path_buf() })?;
+    let metadata = fs::metadata(dir_path).await.map_err(|e| ArcellaError::IoWithPath {
+        source: e,
+        path: dir_path.to_path_buf(),
+    })?;
 
     if !metadata.is_dir() {
         return Ok(None);
     }
 
-    let mut dir_entries = fs::read_dir(dir_path).await
-        .map_err(|e| ArcellaError::IoWithPath { source: e, path: dir_path.to_path_buf() })?;
+    let mut dir_entries = fs::read_dir(dir_path).await.map_err(|e| ArcellaError::IoWithPath {
+        source: e,
+        path: dir_path.to_path_buf(),
+    })?;
 
     let mut toml_files = Vec::new();
 
-    while let Some(entry) = dir_entries.next_entry().await
-        .map_err(|e| ArcellaError::IoWithPath { source: e, path: dir_path.to_path_buf() })?
+    while let Some(entry) =
+        dir_entries.next_entry().await.map_err(|e| ArcellaError::IoWithPath {
+            source: e,
+            path: dir_path.to_path_buf(),
+        })?
     {
         let path = entry.path();
 
@@ -133,7 +141,8 @@ pub async fn find_toml_files_in_dir(dir_path: &Path) -> ArcellaResult<Option<Vec
     toml_files_with_names.sort_by(|(_, name_a), (_, name_b)| name_a.cmp(name_b));
 
     // Extract just the paths
-    let sorted_paths: Vec<PathBuf> = toml_files_with_names.into_iter().map(|(path, _)| path).collect();    
+    let sorted_paths: Vec<PathBuf> =
+        toml_files_with_names.into_iter().map(|(path, _)| path).collect();
 
     Ok(Some(sorted_paths))
 }
@@ -167,9 +176,8 @@ pub async fn collect_toml_includes(
     config_dir: &Path,
     warnings: &mut Vec<ConfigLoadWarning>,
 ) -> ArcellaResult<Vec<PathBuf>> {
-    let all_paths: HashSet<PathBuf> = includes.iter().map(|include_pattern| {
-        config_dir.join(include_pattern)
-    }).collect();
+    let all_paths: HashSet<PathBuf> =
+        includes.iter().map(|include_pattern| config_dir.join(include_pattern)).collect();
 
     // Concurrently check the metadata for all resolved paths
     let metadata_futures: Vec<_> = all_paths
@@ -194,17 +202,13 @@ pub async fn collect_toml_includes(
                     include_dirs.push(path);
                 } else {
                     // Path exists but is not a regular file or directory (e.g., socket, device)
-                    warnings.push(ConfigLoadWarning::SkippedInvalidFile {
-                        path: path.clone(),
-                    });
+                    warnings.push(ConfigLoadWarning::SkippedInvalidFile { path: path.clone() });
                 }
-            }
+            },
             Err(_) => {
                 // Path does not exist → silently skip and warn
-                warnings.push(ConfigLoadWarning::SkippedInvalidFile {
-                    path: path.clone(),
-                });
-            }
+                warnings.push(ConfigLoadWarning::SkippedInvalidFile { path: path.clone() });
+            },
         }
     }
 
@@ -253,9 +257,11 @@ pub async fn collect_toml_includes(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use tempfile::TempDir;
     use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::*;
 
     mod find_toml_tests {
         use super::*;
@@ -277,13 +283,13 @@ mod tests {
 
             assert_eq!(files.len(), 3); // config1.toml, config2.toml, Config3.TOML
 
-            let expected_names: Vec<String> = vec![
-                "config1.toml",
-                "config2.toml", 
-                "Config3.TOML"
-            ].into_iter().map(|s| s.to_string()).collect();
+            let expected_names: Vec<String> = vec!["config1.toml", "config2.toml", "Config3.TOML"]
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
 
-            let actual_names: Vec<String> = files.iter()
+            let actual_names: Vec<String> = files
+                .iter()
                 .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
                 .collect();
 
@@ -303,10 +309,11 @@ mod tests {
 
         #[tokio::test]
         async fn test_find_toml_files_in_dir_nonexistent_path() {
-            let nonexistent_path = Path::new("/this/path/definitely/does/not/exist/arcella_test_dir");
-            
+            let nonexistent_path =
+                Path::new("/this/path/definitely/does/not/exist/arcella_test_dir");
+
             let result = find_toml_files_in_dir(nonexistent_path).await;
-            
+
             assert!(result.is_err());
             // Check that the error is IoWithPath
             match result.unwrap_err() {
@@ -322,7 +329,7 @@ mod tests {
             fs::write(&file_path, "# Just a file").unwrap();
 
             let result = find_toml_files_in_dir(&file_path).await.unwrap();
-            
+
             assert!(result.is_none()); // Path is a file, not a directory
         }
 
@@ -365,9 +372,9 @@ mod tests {
             assert!(files[1].file_name().unwrap().to_string_lossy() == "m.toml");
             assert!(files[2].file_name().unwrap().to_string_lossy() == "z.toml");
         }
-    }    
+    }
 
-   #[test]
+    #[test]
     fn test_is_valid_toml_file_path_edge_cases() {
         use std::path::Path;
 
@@ -426,10 +433,10 @@ mod tests {
             fs::write(&sub_template_path, "# Sub Template file").unwrap();
 
             let includes = vec![
-                "config1.toml".to_string(),           // file in config_dir - OK
-                "sub/".to_string(),                   // directory - OK
-                "config2.toml".to_string(),           // another file in config_dir - OK
-                "sub/sub_config2.toml".to_string(),   // file in subdirectory - OK
+                "config1.toml".to_string(),         // file in config_dir - OK
+                "sub/".to_string(),                 // directory - OK
+                "config2.toml".to_string(),         // another file in config_dir - OK
+                "sub/sub_config2.toml".to_string(), // file in subdirectory - OK
             ];
 
             let mut warnings = Vec::new();
@@ -437,7 +444,10 @@ mod tests {
             let result = collect_toml_includes(&includes, config_dir, &mut warnings).await;
 
             // This should now succeed as all paths exist.
-            assert!(result.is_ok(), "collect_toml_includes should succeed when all paths in includes exist");
+            assert!(
+                result.is_ok(),
+                "collect_toml_includes should succeed when all paths in includes exist"
+            );
             let collected = result.unwrap();
 
             let mut expected_paths = vec![
@@ -482,16 +492,10 @@ mod tests {
             // Add files that should not be included
             fs::write(sub_dir1.join("d.txt"), "# D").unwrap();
 
-            let includes = vec![
-                "sub1/".to_string(),
-                "sub2/".to_string(),
-            ];
+            let includes = vec!["sub1/".to_string(), "sub2/".to_string()];
 
-            let mut expected_paths = vec![
-                sub_dir1.join("a.toml"),
-                sub_dir1.join("b.toml"),
-                sub_dir2.join("c.toml"),
-            ];
+            let mut expected_paths =
+                vec![sub_dir1.join("a.toml"), sub_dir1.join("b.toml"), sub_dir2.join("c.toml")];
             expected_paths.sort_by_key(|p| p.to_string_lossy().to_lowercase());
 
             let mut warnings = Vec::new();
@@ -534,9 +538,7 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             let config_dir = temp_dir.path();
 
-            let includes = vec![
-                "nonexistent_dir/".to_string(),
-            ];
+            let includes = vec!["nonexistent_dir/".to_string()];
 
             let mut warnings = Vec::new();
 
@@ -553,9 +555,7 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             let config_dir = temp_dir.path();
 
-            let includes = vec![
-                "nonexistent_file.toml".to_string(),
-            ];
+            let includes = vec!["nonexistent_file.toml".to_string()];
 
             let mut warnings = Vec::new();
 
@@ -592,7 +592,7 @@ mod tests {
             // includes points to config_dir/file1.toml twice.
             // The result should contain config_dir/file1.toml (once due to deduplication) and config_dir/sub/file1.toml.
             let mut expected_paths = vec![
-                file1_path, // from includes
+                file1_path,        // from includes
                 file1_in_sub_path, // from find_toml_files_in_dir(sub_dir)
             ];
             expected_paths.sort_by_key(|p| p.to_string_lossy().to_lowercase());
@@ -617,13 +617,10 @@ mod tests {
             fs::create_dir(&sub_dir).unwrap();
             fs::write(sub_dir.join("SUB_FILE.TOML"), "# SUB FILE").unwrap();
 
-            let includes = vec![
-                "FILE_UPPER.TOML".to_string(),
-                "sub/".to_string(),
-            ];
+            let includes = vec!["FILE_UPPER.TOML".to_string(), "sub/".to_string()];
 
             let mut expected_paths = vec![
-                file_upper_path, // from includes
+                file_upper_path,               // from includes
                 sub_dir.join("SUB_FILE.TOML"), // from find_toml_files_in_dir
             ];
             expected_paths.sort_by_key(|p| p.to_string_lossy().to_lowercase());
@@ -633,6 +630,5 @@ mod tests {
             let result = collect_toml_includes(&includes, config_dir, &mut warnings).await.unwrap();
             assert_eq!(result, expected_paths);
         }
-    }   
+    }
 }
-

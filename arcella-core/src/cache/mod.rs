@@ -9,18 +9,12 @@
 
 use std::sync::Arc;
 
-use crate::config::ArcellaConfig;
-use crate::ArcellaResult;
+use crate::{ArcellaResult, config::ArcellaConfig};
 
-pub struct ModuleCache {
-}
+pub struct ModuleCache {}
 
 impl ModuleCache {
-    pub async fn new(
-        config: &Arc<ArcellaConfig>,
-    ) -> ArcellaResult<Self> {
-        Ok(Self {
-        })
+    pub async fn new(config: &Arc<ArcellaConfig>) -> ArcellaResult<Self> {
+        Ok(Self {})
     }
-
 }

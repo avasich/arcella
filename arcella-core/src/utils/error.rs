@@ -8,6 +8,7 @@
 // except according to those terms.
 
 use std::path::PathBuf;
+
 use thiserror::Error;
 
 /// Result type alias for `arcella-fs-utils` operations.
@@ -26,22 +27,15 @@ pub enum ArcellaUtilsError {
 
     /// IO error with associated path for better diagnostics
     #[error("I/O error at {path:?}: {source}")]
-    IoWithPath {
-        source: std::io::Error,
-        path: PathBuf,
-    },
+    IoWithPath { source: std::io::Error, path: PathBuf },
 
     /// Invalid argument provided.
     #[error("Invalid argument: {message}")]
-    InvalidArgument {
-        message: String,
-    },
+    InvalidArgument { message: String },
 
     /// Path not found
     #[error("Path not found: {path:?}")]
-    PathNotFound {
-        path: PathBuf,
-    },
+    PathNotFound { path: PathBuf },
 
     /// TOML error
     #[error("TOML error: {0}")]
@@ -51,9 +45,6 @@ pub enum ArcellaUtilsError {
 impl ArcellaUtilsError {
     /// Creates an `IoWithPath` error from a path and an I/O error.
     pub fn io_with_path<E: Into<std::io::Error>>(path: PathBuf, source: E) -> Self {
-        Self::IoWithPath {
-            source: source.into(),
-            path,
-        }
+        Self::IoWithPath { source: source.into(), path }
     }
 }

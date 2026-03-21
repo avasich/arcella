@@ -10,12 +10,13 @@
 //! Conversion utilities from `wasmtime::component::types` to `arcella_types::spec`.
 
 use std::collections::HashMap;
-use wasmtime::{
-    component::types::{self, ComponentItem},
-    Engine,
-};
 
 use arcella_types::spec::ComponentItemSpec;
+use wasmtime::{
+    Engine,
+    component::types::{self, ComponentItem},
+};
+
 use super::ArcellaWasmtimeResult;
 
 const MAX_RECURSION_DEPTH: usize = 32;
@@ -46,29 +47,37 @@ impl ComponentItemSpecExt for ComponentItem {
 /// Extension trait for `wasmtime::component::types::Component`.
 pub trait ComponentTypeExt {
     /// Extracts imports as a map of `ComponentItemSpec`.
-    fn imports_spec(&self, engine: &Engine) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>>;
+    fn imports_spec(
+        &self,
+        engine: &Engine,
+    ) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>>;
 
     /// Extracts exports as a map of `ComponentItemSpec`.
-    fn exports_spec(&self, engine: &Engine) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>>;
+    fn exports_spec(
+        &self,
+        engine: &Engine,
+    ) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>>;
 }
 
 impl ComponentTypeExt for types::Component {
-    fn imports_spec(&self, engine: &Engine) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>> {
-        self.imports(engine)
-            .map(|(name, item)| Ok((name.into(), item.to_spec(engine)?)))
-            .collect()
+    fn imports_spec(
+        &self,
+        engine: &Engine,
+    ) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>> {
+        self.imports(engine).map(|(name, item)| Ok((name.into(), item.to_spec(engine)?))).collect()
     }
 
-    fn exports_spec(&self, engine: &Engine) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>> {
-        self.exports(engine)
-            .map(|(name, item)| Ok((name.into(), item.to_spec(engine)?)))
-            .collect()
+    fn exports_spec(
+        &self,
+        engine: &Engine,
+    ) -> ArcellaWasmtimeResult<HashMap<String, ComponentItemSpec>> {
+        self.exports(engine).map(|(name, item)| Ok((name.into(), item.to_spec(engine)?))).collect()
     }
 }
 
 fn to_spec_with_depth(
     item: &ComponentItem,
-    engine: &Engine, 
+    engine: &Engine,
     depth: usize,
     max_depth: usize,
 ) -> ArcellaWasmtimeResult<ComponentItemSpec> {
@@ -80,28 +89,23 @@ fn to_spec_with_depth(
 
     match item {
         ComponentItem::ComponentFunc(func_ty) => {
-            let params = func_ty
-                .params()
-                .map(|(name, ty)| (name.into(), type_to_string(&ty)) )
-                .collect();
-            let results = func_ty
-                .results()
-                .map(|ty| type_to_string(&ty) )
-                .collect();
+            let params =
+                func_ty.params().map(|(name, ty)| (name.into(), type_to_string(&ty))).collect();
+            let results = func_ty.results().map(|ty| type_to_string(&ty)).collect();
             Ok(ComponentItemSpec::ComponentFunc { params, results })
         },
 
         ComponentItem::CoreFunc(ty) => Ok(ComponentItemSpec::CoreFunc(format!("{}", ty))),
 
-        ComponentItem::Module(ty ) => Ok(ComponentItemSpec::Module(format!("{:?}", ty))),
+        ComponentItem::Module(ty) => Ok(ComponentItemSpec::Module(format!("{:?}", ty))),
 
-        ComponentItem::Component(comp_ty ) => {
+        ComponentItem::Component(comp_ty) => {
             let imports = comp_ty
                 .imports(engine)
                 .map(|(name, nested_item)| {
                     (
                         name.into(),
-                        match to_spec_with_depth(&nested_item, engine, depth + 1, max_depth)  {
+                        match to_spec_with_depth(&nested_item, engine, depth + 1, max_depth) {
                             Ok(item) => item,
                             // Best-effort parsing: skip malformed nested items
                             Err(e) => ComponentItemSpec::Unknown {
@@ -116,7 +120,7 @@ fn to_spec_with_depth(
                 .map(|(name, nested_item)| {
                     (
                         name.into(),
-                        match to_spec_with_depth(&nested_item, engine, depth + 1, max_depth)  {
+                        match to_spec_with_depth(&nested_item, engine, depth + 1, max_depth) {
                             Ok(item) => item,
                             // Best-effort parsing: skip malformed nested items
                             Err(e) => ComponentItemSpec::Unknown {
@@ -127,7 +131,7 @@ fn to_spec_with_depth(
                 })
                 .collect();
             Ok(ComponentItemSpec::Component { imports, exports })
-        }
+        },
 
         ComponentItem::ComponentInstance(ty) => {
             let exports = ty
@@ -135,7 +139,7 @@ fn to_spec_with_depth(
                 .map(|(name, nested_item)| {
                     (
                         name.into(),
-                        match to_spec_with_depth(&nested_item, engine, depth + 1, max_depth)  {
+                        match to_spec_with_depth(&nested_item, engine, depth + 1, max_depth) {
                             Ok(item) => item,
                             // Best-effort parsing: skip malformed nested items
                             Err(e) => ComponentItemSpec::Unknown {
@@ -148,18 +152,16 @@ fn to_spec_with_depth(
             Ok(ComponentItemSpec::ComponentInstance { exports })
         },
 
-        ComponentItem::Type(ty ) => {
+        ComponentItem::Type(ty) => {
             // TODO(v0.4): Replace with WIT type name via `wit-parser` or canonical string
             Ok(ComponentItemSpec::Type(format!("{:?}", ty)))
         },
 
-        ComponentItem::Resource(ty ) => {
+        ComponentItem::Resource(ty) => {
             // TODO(v0.4): Replace with WIT type name via `wit-parser` or canonical string
             Ok(ComponentItemSpec::Resource(format!("{:?}", ty)))
         },
-
     }
-
 }
 
 fn type_to_string(ty: &types::Type) -> String {
@@ -179,12 +181,13 @@ fn type_to_string(ty: &types::Type) -> String {
         types::Type::String => "string".into(),
         _ => format!("unknown({:?})", ty),
     }
-}    
+}
 
 #[cfg(test)]
 mod tests {
+    use wasmtime::{Engine, component::Component};
+
     use super::*;
-    use wasmtime::{component::Component, Engine};
 
     #[test]
     fn test_simple_component_func() -> ArcellaWasmtimeResult<()> {
@@ -211,7 +214,7 @@ mod tests {
             ComponentItemSpec::ComponentFunc { params, results } => {
                 assert!(params.is_empty());
                 assert_eq!(results, &["string"]);
-            }
+            },
             _ => panic!("Expected ComponentFunc"),
         }
 
@@ -226,10 +229,10 @@ mod tests {
         let ty = component.component_type();
 
         let item = ComponentItem::Component(ty);
-        let spec = to_spec_with_depth(&item, &engine, MAX_RECURSION_DEPTH + 1, MAX_RECURSION_DEPTH)?;
-        
+        let spec =
+            to_spec_with_depth(&item, &engine, MAX_RECURSION_DEPTH + 1, MAX_RECURSION_DEPTH)?;
+
         assert!(matches!(spec, ComponentItemSpec::Unknown { .. }));
         Ok(())
     }
-
 }

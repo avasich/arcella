@@ -39,18 +39,24 @@
 //!   key: "servers", value: Array([Map{"name": "a"}])
 //!   ```
 
-use indexmap::IndexMap;
-use ordered_float::OrderedFloat;
 use std::collections::HashMap;
-use toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item as TomlEditItem, Table, Value as TomlEditValue};
 
 use arcella_types::config::{ConfigValues, Value as TomlValue};
+use indexmap::IndexMap;
+use ordered_float::OrderedFloat;
+use toml_edit::{
+    ArrayOfTables,
+    DocumentMut,
+    InlineTable,
+    Item as TomlEditItem,
+    Table,
+    Value as TomlEditValue,
+};
 
-use super::error::{ArcellaUtilsError, ArcellaUtilsResult};
-
-use super::types::MAX_TOML_DEPTH;
-use super::types::TraversalResult;
-use super::types::TomlFileData;
+use super::{
+    error::{ArcellaUtilsError, ArcellaUtilsResult},
+    types::{MAX_TOML_DEPTH, TomlFileData, TraversalResult},
+};
 
 /// Key name used to identify file inclusion directives in TOML.
 const INCLUDES_KEY: &str = "includes";
@@ -83,14 +89,15 @@ impl ValueExt for TomlValue {
             TomlEditValue::Array(array) => {
                 let inner_values: Vec<TomlValue> = array
                     .iter()
-                    .map(|v| Self::from_toml_value(v)) 
+                    .map(|v| Self::from_toml_value(v))
                     .collect::<ArcellaUtilsResult<_>>()?;
                 Self::Array(inner_values)
             },
-            _ => { 
-                return Err(ArcellaUtilsError::TOML(
-                    format!("Unsupported TOML value type: {:?}", value)
-                ));
+            _ => {
+                return Err(ArcellaUtilsError::TOML(format!(
+                    "Unsupported TOML value type: {:?}",
+                    value
+                )));
             },
         };
 
@@ -144,10 +151,8 @@ fn convert_array_of_tables_to_value(
         includes.extend(temp_includes);
 
         // Convert collected values into a HashMap (relative to this table)
-        let map: HashMap<String, TomlValue> = temp_values
-            .into_iter()
-            .map(|(k, (v, _))| (k, v))
-            .collect();
+        let map: HashMap<String, TomlValue> =
+            temp_values.into_iter().map(|(k, (v, _))| (k, v)).collect();
 
         result_vec.push(TomlValue::Map(map));
 
@@ -170,7 +175,7 @@ fn convert_array_of_tables_to_value(
 fn table_to_value_map_recursive(
     table: &Table,
     current_path: &[String],
-    file_idx: usize, 
+    file_idx: usize,
     includes: &mut Vec<String>,
     values: &mut ConfigValues,
     depth: usize,
@@ -179,7 +184,7 @@ fn table_to_value_map_recursive(
         return Ok(TraversalResult::Pruned);
     }
 
-    let mut result = TraversalResult::Full; 
+    let mut result = TraversalResult::Full;
 
     for (key, item) in table {
         let mut key_path = current_path.to_vec();
@@ -188,42 +193,32 @@ fn table_to_value_map_recursive(
         if key == INCLUDES_KEY {
             // We accept both string and array forms of 'includes' for user convenience.
             match item {
-                TomlEditItem::Value(TomlEditValue::Array(arr)) => {
+                TomlEditItem::Value(TomlEditValue::Array(arr)) =>
                     for elem in arr {
                         if let Some(s) = elem.as_str() {
                             includes.push(s.to_owned());
                         }
-                    }
-                }
+                    },
                 // Also handle a single string value for 'includes'
-                TomlEditItem::Value(single) => {
+                TomlEditItem::Value(single) =>
                     if let Some(s) = single.as_str() {
                         includes.push(s.to_owned());
-                    }
-                }
+                    },
                 // Non-string/array values under 'includes' are silently ignored.
                 // In the future, this could emit a ConfigLoadWarning.
                 _ => {
                     // Do nothing — not an error, but also not actionable.
-                }
+                },
             }
 
             continue;
-
         }
 
-        let child_result = collect_paths_recursive(
-            item,
-            &key_path,
-            file_idx, 
-            includes,
-            values,
-            depth + 1,
-        )?; 
+        let child_result =
+            collect_paths_recursive(item, &key_path, file_idx, includes, values, depth + 1)?;
         if child_result == TraversalResult::Pruned {
             result = TraversalResult::Pruned;
         }
-
     }
 
     Ok(result)
@@ -274,7 +269,7 @@ fn table_to_value_map_recursive(
 pub fn collect_paths_recursive(
     item: &TomlEditItem,
     current_path: &[String],
-    file_idx: usize, 
+    file_idx: usize,
     includes: &mut Vec<String>,
     values: &mut ConfigValues,
     depth: usize,
@@ -286,45 +281,26 @@ pub fn collect_paths_recursive(
     match item {
         TomlEditItem::Value(TomlEditValue::InlineTable(inline)) => {
             let table = inline_table_to_table(inline);
-            table_to_value_map_recursive(
-                &table,
-                current_path,
-                file_idx, 
-                includes,
-                values,
-                depth,
-            )
-        }
-        TomlEditItem::Table(table) => {
-            table_to_value_map_recursive(
-                table,
-                current_path,
-                file_idx, 
-                includes,
-                values,
-                depth,
-            )
-        }
+            table_to_value_map_recursive(&table, current_path, file_idx, includes, values, depth)
+        },
+        TomlEditItem::Table(table) =>
+            table_to_value_map_recursive(table, current_path, file_idx, includes, values, depth),
         TomlEditItem::ArrayOfTables(arr) => {
-            let (array_val, child_result) = convert_array_of_tables_to_value(
-                arr,
-                depth,
-                file_idx,
-                includes,
-            )?;
+            let (array_val, child_result) =
+                convert_array_of_tables_to_value(arr, depth, file_idx, includes)?;
             values.insert(current_path.join("."), (array_val, file_idx));
             Ok(child_result)
-        }
+        },
         TomlEditItem::Value(subvalue) => {
             let converted = TomlValue::from_toml_value(subvalue)?;
             values.insert(current_path.join("."), (converted, file_idx));
             Ok(TraversalResult::Full)
-        }
+        },
         TomlEditItem::None => {
             // TOML has no null literal, but `toml_edit` may produce None programmatically.
             values.insert(current_path.join("."), (TomlValue::Null, file_idx));
             Ok(TraversalResult::Full)
-        }
+        },
     }
 }
 
@@ -336,9 +312,7 @@ pub fn collect_paths_recursive(
 ///
 /// Returns `ArcellaUtilsError::TOML` if the input is not valid TOML.
 pub fn parse(content: &str) -> ArcellaUtilsResult<DocumentMut> {
-    content
-        .parse::<DocumentMut>()
-        .map_err(|e| ArcellaUtilsError::TOML(format!("{}", e)))
+    content.parse::<DocumentMut>().map_err(|e| ArcellaUtilsError::TOML(format!("{}", e)))
 }
 
 /// Extracts configuration data from a parsed TOML document.
@@ -359,22 +333,16 @@ pub fn parse(content: &str) -> ArcellaUtilsResult<DocumentMut> {
 /// - [`TomlFileData`] containing `includes` and `values`.
 /// - [`TraversalResult`] indicating whether traversal was complete or pruned.
 pub fn collect_paths(
-    doc: &DocumentMut, 
+    doc: &DocumentMut,
     prefix: &[String],
     file_idx: usize,
 ) -> ArcellaUtilsResult<(TomlFileData, TraversalResult)> {
     let mut values: ConfigValues = IndexMap::new();
     let mut includes: Vec<String> = Vec::new();
-    let result = collect_paths_recursive(
-        doc.as_item(),
-        prefix,
-        file_idx,
-        &mut includes,
-        &mut values,
-        0,
-    )?;
+    let result =
+        collect_paths_recursive(doc.as_item(), prefix, file_idx, &mut includes, &mut values, 0)?;
 
-    Ok((TomlFileData{includes, values}, result))
+    Ok((TomlFileData { includes, values }, result))
 }
 
 /// Parses TOML content and extracts configuration data in one step.
@@ -404,9 +372,9 @@ mod tests {
     use super::*;
 
     mod parse_config_and_collect_includes_tests {
-       use super::*;
+        use super::*;
 
-            #[test]
+        #[test]
         fn test_max_toml_depth_pruned() {
             const MAX_DEPTH: usize = MAX_TOML_DEPTH; // 10
 
@@ -433,19 +401,18 @@ mod tests {
             includes = ["config.d/*.toml"]
             "#;
 
-            let config = parse_and_collect(
-                config_content,
-                &["root".to_string()],
-                0,
-            ).unwrap();
+            let config = parse_and_collect(config_content, &["root".to_string()], 0).unwrap();
 
             let expected_includes = vec!["config.d/*.toml".to_string()];
 
             let mut expected_values: ConfigValues = IndexMap::new();
             expected_values.insert("root.server.port".to_string(), (TomlValue::Integer(8080), 0));
-            expected_values.insert("root.server.host".to_string(), (TomlValue::String("localhost".to_string()), 0));
+            expected_values.insert(
+                "root.server.host".to_string(),
+                (TomlValue::String("localhost".to_string()), 0),
+            );
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
@@ -468,22 +435,26 @@ mod tests {
             level = "info"
             "#;
 
-            let config = parse_and_collect(
-                config_content,
-                &[],
-                0,
-            ).unwrap();
+            let config = parse_and_collect(config_content, &[], 0).unwrap();
 
             let expected_includes = Vec::new();
 
             let mut expected_values: ConfigValues = IndexMap::new();
-            expected_values.insert("database.host".to_string(), (TomlValue::String("db.example.com".to_string()), 0));
+            expected_values.insert(
+                "database.host".to_string(),
+                (TomlValue::String("db.example.com".to_string()), 0),
+            );
             expected_values.insert("database.port".to_string(), (TomlValue::Integer(5432), 0));
-            expected_values.insert("database.pool.max_connections".to_string(), (TomlValue::Integer(10), 0));
-            expected_values.insert("database.pool.timeout".to_string(), (TomlValue::Float(OrderedFloat(30.5)), 0));
-            expected_values.insert("logging.level".to_string(), (TomlValue::String("info".to_string()), 0));
+            expected_values
+                .insert("database.pool.max_connections".to_string(), (TomlValue::Integer(10), 0));
+            expected_values.insert(
+                "database.pool.timeout".to_string(),
+                (TomlValue::Float(OrderedFloat(30.5)), 0),
+            );
+            expected_values
+                .insert("logging.level".to_string(), (TomlValue::String("info".to_string()), 0));
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
@@ -500,18 +471,17 @@ mod tests {
             includes = "overrides.toml"
             "#;
 
-            let config = parse_and_collect(
-                config_content,
-                &["config".to_string()],
-                0
-            ).unwrap();
+            let config = parse_and_collect(config_content, &["config".to_string()], 0).unwrap();
 
             let expected_includes = vec!["overrides.toml".to_string()];
 
             let mut expected_values: ConfigValues = IndexMap::new();
-            expected_values.insert("config.app.name".to_string(), (TomlValue::String("my_app".to_string()), 0));
+            expected_values.insert(
+                "config.app.name".to_string(),
+                (TomlValue::String("my_app".to_string()), 0),
+            );
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
@@ -528,11 +498,7 @@ mod tests {
             includes = ["config.d/*.toml", "local.toml", "secrets.toml"]
             "#;
 
-            let config = parse_and_collect(
-                config_content,
-                &vec!["config".to_string()],
-                0,
-            ).unwrap();
+            let config = parse_and_collect(config_content, &vec!["config".to_string()], 0).unwrap();
 
             let expected_includes = vec![
                 "config.d/*.toml".to_string(),
@@ -541,30 +507,29 @@ mod tests {
             ];
 
             let mut expected_values: ConfigValues = IndexMap::new();
-            expected_values.insert("config.app.version".to_string(), (TomlValue::String("1.0.0".to_string()), 0));
+            expected_values.insert(
+                "config.app.version".to_string(),
+                (TomlValue::String("1.0.0".to_string()), 0),
+            );
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
 
             assert_eq!(config, (expected_config, TraversalResult::Full));
-       }
+        }
 
         #[test]
         fn test_parse_config_and_collect_includes_empty_content() {
             let config_content = "";
 
-            let config = parse_and_collect(
-                config_content,
-                &[],
-                0,
-            ).unwrap();
+            let config = parse_and_collect(config_content, &[], 0).unwrap();
 
             let expected_includes = Vec::new();
             let expected_values = IndexMap::new();
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
@@ -578,16 +543,12 @@ mod tests {
             includes = ["a.toml", "b.toml"]
             "#;
 
-            let config = parse_and_collect(
-                config_content,
-                &["top".to_string()],
-                0,
-            ).unwrap();
+            let config = parse_and_collect(config_content, &["top".to_string()], 0).unwrap();
 
             let expected_includes = vec!["a.toml".to_string(), "b.toml".to_string()];
             let expected_values = IndexMap::new();
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
@@ -602,15 +563,11 @@ mod tests {
             name = "broken"
             "#; // Invalid TOML syntax
 
-            let result = parse_and_collect(
-                config_content,
-                &[],
-                0,
-            );
+            let result = parse_and_collect(config_content, &[], 0);
 
             assert!(result.is_err());
             match result.unwrap_err() {
-                ArcellaUtilsError::TOML(_) => {} // OK
+                ArcellaUtilsError::TOML(_) => {}, // OK
                 _ => panic!("Expected ArcellaUtilsError::TOML"),
             }
         }
@@ -629,35 +586,43 @@ mod tests {
             ports = [80, 443, 8080]
             "#;
 
-            let config = parse_and_collect(
-                config_content,
-                &[],
-                0,
-            ).unwrap();
+            let config = parse_and_collect(config_content, &[], 0).unwrap();
 
             let expected_includes = Vec::new();
 
             let mut expected_values: ConfigValues = IndexMap::new();
             expected_values.insert("features.enabled".to_string(), (TomlValue::Boolean(true), 0));
             expected_values.insert("features.disabled".to_string(), (TomlValue::Boolean(false), 0));
-            expected_values.insert("features.flags.list".to_string(), (TomlValue::Array(vec![
-                TomlValue::String("flag1".to_string()),
-                TomlValue::String("flag2".to_string()),
-                TomlValue::String("flag3".to_string()),
-            ]), 0));
-            expected_values.insert("server.ports".to_string(), (TomlValue::Array(vec![
-                TomlValue::Integer(80),
-                TomlValue::Integer(443),
-                TomlValue::Integer(8080),
-            ]), 0));
+            expected_values.insert(
+                "features.flags.list".to_string(),
+                (
+                    TomlValue::Array(vec![
+                        TomlValue::String("flag1".to_string()),
+                        TomlValue::String("flag2".to_string()),
+                        TomlValue::String("flag3".to_string()),
+                    ]),
+                    0,
+                ),
+            );
+            expected_values.insert(
+                "server.ports".to_string(),
+                (
+                    TomlValue::Array(vec![
+                        TomlValue::Integer(80),
+                        TomlValue::Integer(443),
+                        TomlValue::Integer(8080),
+                    ]),
+                    0,
+                ),
+            );
 
-            let expected_config = TomlFileData{
+            let expected_config = TomlFileData {
                 includes: expected_includes,
                 values: expected_values,
             };
 
             assert_eq!(config, (expected_config, TraversalResult::Full));
-        }        
+        }
 
         #[test]
         fn test_array_of_tables_support() {
@@ -745,7 +710,7 @@ mod tests {
                     } else {
                         panic!("Expected map");
                     }
-                }
+                },
                 _ => panic!("Expected array"),
             }
         }
@@ -771,20 +736,17 @@ mod tests {
 
             assert_eq!(config.values.len(), 8);
 
-            for (num,  (_, (value, idx))) in (&config.values).iter().enumerate() {
+            for (num, (_, (value, idx))) in (&config.values).iter().enumerate() {
                 match value {
                     TomlValue::Integer(val) => {
                         assert_eq!(*val, (START_IDX + MAX_DEPTH - num) as i64);
-                    }
+                    },
                     _ => {
                         panic!("Error values!")
-                    }
+                    },
                 }
                 assert_eq!(*idx, FILIE_IDX);
             }
-
         }
-
     }
-
 }

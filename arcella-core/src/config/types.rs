@@ -7,11 +7,11 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use indexmap::IndexSet;
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
-use super::ConfigLoadWarning; 
+use indexmap::IndexSet;
+
+use super::ConfigLoadWarning;
 
 /// Template file suffix
 pub const TEMPLATE_TOML_SUFFIX: &str = ".template.toml";

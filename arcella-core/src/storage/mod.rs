@@ -7,12 +7,14 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::sync::Arc;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
 use tempfile::TempDir;
 
-use crate::config::ArcellaConfig;
-use crate::{ArcellaError, ArcellaResult};
+use crate::{ArcellaError, ArcellaResult, config::ArcellaConfig};
 
 pub struct StorageManager {
     pub cache_dir: PathBuf,
@@ -22,27 +24,20 @@ pub struct StorageManager {
 }
 
 impl StorageManager {
-    pub async fn new(
-        config: &Arc<ArcellaConfig>,
-    ) -> ArcellaResult<Self> {
+    pub async fn new(config: &Arc<ArcellaConfig>) -> ArcellaResult<Self> {
+        let cache_dir = config.base_dir.join(config.extract_path_value("cache.dir")?);
+        tracing::debug!("Cache directory path: {:?}", cache_dir);
 
-        let cache_dir = config
-            .base_dir.join(config.extract_path_value("cache.dir")?);
-        tracing::debug!("Cache directory path: {:?}", cache_dir );
+        let metadata_dir = config.base_dir.join(config.extract_path_value("metadata.dir")?);
+        tracing::debug!("Metadata directory path: {:?}", metadata_dir);
 
-        let metadata_dir = config
-            .base_dir.join(config.extract_path_value("metadata.dir")?);
-        tracing::debug!("Metadata directory path: {:?}", metadata_dir );
+        let modules_dir = config.base_dir.join(config.extract_path_value("modules.dir")?);
+        tracing::debug!("Modules directory path: {:?}", modules_dir);
 
-        let modules_dir = config
-            .base_dir.join(config.extract_path_value("modules.dir")?);
-        tracing::debug!("Modules directory path: {:?}", modules_dir );
-
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| ArcellaError::IoWithPath {
-                source: e,
-                path: PathBuf::from("<tempdir>"),
-            })?;
+        let temp_dir = tempfile::tempdir().map_err(|e| ArcellaError::IoWithPath {
+            source: e,
+            path: PathBuf::from("<tempdir>"),
+        })?;
         tracing::debug!("Temporary directory created: {:?}", temp_dir.path());
 
 
@@ -55,11 +50,9 @@ impl StorageManager {
 
         manager.ensure_directories().await?;
         Ok(manager)
-
     }
 
     async fn ensure_directories(&self) -> ArcellaResult<()> {
-
         if !self.modules_dir.exists() {
             tokio::fs::create_dir_all(&self.modules_dir).await?;
             tracing::info!("Created modules directory: {:?}", self.modules_dir);
@@ -71,7 +64,7 @@ impl StorageManager {
         }
 
         Ok(())
-    } 
+    }
 
     pub fn temp_path(&self) -> &Path {
         self.temp_dir.path()
@@ -100,5 +93,4 @@ impl StorageManager {
             temp_dir: internal_temp,
         }
     }
-        
 }

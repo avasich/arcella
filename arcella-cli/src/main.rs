@@ -7,12 +7,14 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
 
 use arcella_types::alme::{AlmeCommand, AlmeRequest, AlmeResponse};
+use clap::{Parser, Subcommand};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::UnixStream,
+};
 
 /// Arcella CLI — управление runtime'ом через ALME
 #[derive(Parser)]
@@ -85,10 +87,10 @@ async fn send_alme_request(
                 "ALME socket not found at {}. Is Arcella running?",
                 socket_path.display()
             );
-        }
+        },
         Err(e) => {
             anyhow::bail!("Failed to connect to ALME server: {}", e);
-        }
+        },
     };
     let (reader, mut writer) = tokio::io::split(stream);
     let mut reader = BufReader::new(reader);
@@ -146,14 +148,12 @@ async fn handle_command(cmd: Commands) -> anyhow::Result<()> {
 
     match cmd {
         Commands::Ping => {
-            exec_alme_cmd(&socket_path, || AlmeRequest { 
-                command: AlmeCommand::Ping 
-            }, "").await?;
-        }
+            exec_alme_cmd(&socket_path, || AlmeRequest { command: AlmeCommand::Ping }, "").await?;
+        },
 
         Commands::LogTail { n } => {
             let req = AlmeRequest {
-                command: AlmeCommand::LogTail { n }
+                command: AlmeCommand::LogTail { n },
             };
             let resp = send_alme_request(&socket_path, req).await?;
             if resp.success {
@@ -170,45 +170,79 @@ async fn handle_command(cmd: Commands) -> anyhow::Result<()> {
                 eprintln!("Error: {}", resp.message);
                 std::process::exit(1);
             }
-        }
+        },
 
         Commands::Status => {
-            exec_alme_cmd(&socket_path, || AlmeRequest {
-                command: AlmeCommand::Status { deployment_id: None }
-            }, "").await?;
-        }
+            exec_alme_cmd(
+                &socket_path,
+                || AlmeRequest {
+                    command: AlmeCommand::Status { deployment_id: None },
+                },
+                "",
+            )
+            .await?;
+        },
 
         Commands::ModuleList => {
-            exec_alme_cmd(&socket_path, || AlmeRequest {
-                command: AlmeCommand::ModuleList
-            }, "").await?;
-        }
+            exec_alme_cmd(
+                &socket_path,
+                || AlmeRequest {
+                    command: AlmeCommand::ModuleList,
+                },
+                "",
+            )
+            .await?;
+        },
 
         Commands::ModuleInstall { path } => {
             let path = path.to_string_lossy().into_owned();
-            exec_alme_cmd(&socket_path, || AlmeRequest {
-                command: AlmeCommand::ModuleInstall { path: path.clone() }
-            }, "").await?;
-        }
+            exec_alme_cmd(
+                &socket_path,
+                || AlmeRequest {
+                    command: AlmeCommand::ModuleInstall { path: path.clone() },
+                },
+                "",
+            )
+            .await?;
+        },
 
         Commands::ModuleDeploy { file } => {
             let file = file.to_string_lossy().into_owned();
-            exec_alme_cmd(&socket_path, || AlmeRequest {
-                command: AlmeCommand::ModuleDeploy { file: file.clone() }
-            }, "").await?;
-        }
+            exec_alme_cmd(
+                &socket_path,
+                || AlmeRequest {
+                    command: AlmeCommand::ModuleDeploy { file: file.clone() },
+                },
+                "",
+            )
+            .await?;
+        },
 
         Commands::ModuleStart { deployment_id } => {
-            exec_alme_cmd(&socket_path, || AlmeRequest {
-                command: AlmeCommand::ModuleStart { deployment_id: deployment_id.clone() }
-            }, "").await?;
-        }
+            exec_alme_cmd(
+                &socket_path,
+                || AlmeRequest {
+                    command: AlmeCommand::ModuleStart {
+                        deployment_id: deployment_id.clone(),
+                    },
+                },
+                "",
+            )
+            .await?;
+        },
 
         Commands::ModuleStop { deployment_id } => {
-            exec_alme_cmd(&socket_path, || AlmeRequest {
-                command: AlmeCommand::ModuleStop { deployment_id: deployment_id.clone() }
-            }, "").await?;
-        }
+            exec_alme_cmd(
+                &socket_path,
+                || AlmeRequest {
+                    command: AlmeCommand::ModuleStop {
+                        deployment_id: deployment_id.clone(),
+                    },
+                },
+                "",
+            )
+            .await?;
+        },
 
         Commands::Shell => {
             eprintln!("Interactive shell not implemented yet (use single commands)");
@@ -221,6 +255,6 @@ async fn handle_command(cmd: Commands) -> anyhow::Result<()> {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse(); 
+    let cli = Cli::parse();
     handle_command(cli.command).await
 }

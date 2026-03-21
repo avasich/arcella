@@ -7,19 +7,12 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::{str::FromStr, sync::OnceLock};
+
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::str::FromStr;
-use std::sync::OnceLock;
 
-use crate::{
-	ArcellaTypeError, 
-	ArcellaTypeResult,
-};
-
-use crate::module_id::*;
-
-use crate::interface_list::*;
+use crate::{ArcellaTypeError, ArcellaTypeResult, interface_list::*, module_id::*};
 
 /// A portable, human-readable descriptor of a WebAssembly component.
 ///
@@ -129,7 +122,7 @@ impl<'de> Deserialize<'de> for ComponentManifest {
                     imports: InterfaceList::default(),
                     capabilities: ComponentCapabilities::default(),
                 })
-            }
+            },
 
             // Format 2: nested object
             ComponentManifestDeserializeHelper::Nested {
@@ -163,7 +156,7 @@ impl<'de> Deserialize<'de> for ComponentManifest {
                     imports,
                     capabilities,
                 })
-            }
+            },
         }
     }
 }
@@ -180,16 +173,18 @@ impl ComponentManifest {
     pub fn validate(&self) -> ArcellaTypeResult<()> {
         for key in self.imports.keys() {
             if !Self::validate_interface_format(key) {
-                return Err(ArcellaTypeError::Manifest(
-                    format!("Invalid import interface format: {}", key)
-                ));
+                return Err(ArcellaTypeError::Manifest(format!(
+                    "Invalid import interface format: {}",
+                    key
+                )));
             }
         }
         for key in self.exports.keys() {
             if !Self::validate_interface_format(key) {
-                return Err(ArcellaTypeError::Manifest(
-                    format!("Invalid export interface format: {}", key)
-                ));
+                return Err(ArcellaTypeError::Manifest(format!(
+                    "Invalid export interface format: {}",
+                    key
+                )));
             }
         }
         Ok(())
@@ -209,9 +204,8 @@ impl ComponentManifest {
         let re1 = RE_WITH_VERSION.get_or_init(|| {
             Regex::new(r"^[a-zA-Z0-9_-]+:[a-zA-Z0-9_/-]+@[a-zA-Z0-9.+_-]+$").unwrap()
         });
-        let re2 = RE_WITHOUT_VERSION.get_or_init(|| {
-            Regex::new(r"^[a-zA-Z0-9_-]+:[a-zA-Z0-9_/-]+$").unwrap()
-        });
+        let re2 = RE_WITHOUT_VERSION
+            .get_or_init(|| Regex::new(r"^[a-zA-Z0-9_-]+:[a-zA-Z0-9_/-]+$").unwrap());
 
         re1.is_match(s) || re2.is_match(s)
     }
@@ -290,8 +284,9 @@ pub struct ComponentSecurity {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
+
+    use super::*;
     use crate::spec::ComponentItemSpec;
 
     #[test]
@@ -368,7 +363,9 @@ mod tests {
             imports: InterfaceList::default(),
             capabilities: ComponentCapabilities::default(),
         };
-        manifest.imports.insert("bad::interface".into(), ComponentItemSpec::Unknown { debug: None });
+        manifest
+            .imports
+            .insert("bad::interface".into(), ComponentItemSpec::Unknown { debug: None });
         assert!(manifest.validate().is_err());
     }
 

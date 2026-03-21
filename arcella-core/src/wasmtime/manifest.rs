@@ -7,26 +7,18 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::str::FromStr;
-use wasmtime::{Engine, component::Component};
+use std::{collections::HashMap, path::Path, str::FromStr};
 
 use arcella_types::{
     interface_list::InterfaceList,
-    manifest::{
-        ComponentManifest,
-        ComponentCapabilities,
-    },
+    manifest::{ComponentCapabilities, ComponentManifest},
     module_id::ModuleId,
     spec::ComponentItemSpec,
 };
+use wasmtime::{Engine, component::Component};
 
 use super::{
-    error::{
-        ArcellaWasmtimeError,
-        ArcellaWasmtimeResult,
-    },
+    error::{ArcellaWasmtimeError, ArcellaWasmtimeResult},
     from_wasmtime::ComponentItemSpecExt,
 };
 
@@ -42,7 +34,10 @@ use super::{
 ///
 /// For MVP v0.2.3, we assume that if `component.toml` is missing,
 /// the filename encodes `name@version`.
-pub fn component_manifest_from_wasm(engine: &Engine, wasm_path: &Path) -> ArcellaWasmtimeResult<ComponentManifest> {
+pub fn component_manifest_from_wasm(
+    engine: &Engine,
+    wasm_path: &Path,
+) -> ArcellaWasmtimeResult<ComponentManifest> {
     if !wasm_path.exists() {
         return Err(ArcellaWasmtimeError::IoWithPath {
             source: std::io::Error::from(std::io::ErrorKind::NotFound),
@@ -57,18 +52,16 @@ pub fn component_manifest_from_wasm(engine: &Engine, wasm_path: &Path) -> Arcell
 
     let module_id = ModuleId::from_str(file_stem)?;
 
-    let component = Component::from_file(engine, wasm_path)
-        .map_err(ArcellaWasmtimeError::Wasmtime)?;
+    let component =
+        Component::from_file(engine, wasm_path).map_err(ArcellaWasmtimeError::Wasmtime)?;
 
     let component_type = component.component_type();
 
     let exports: HashMap<String, ComponentItemSpec> = component_type
         .exports(engine)
         .map(|(name, item)| {
-            let spec = item.to_spec(engine).unwrap_or_else(|e| {
-                ComponentItemSpec::Unknown {
-                    debug: Some(format!("Export '{}': {:?}", name, e)),
-                }
+            let spec = item.to_spec(engine).unwrap_or_else(|e| ComponentItemSpec::Unknown {
+                debug: Some(format!("Export '{}': {:?}", name, e)),
             });
             (name.into(), spec)
         })
@@ -77,10 +70,8 @@ pub fn component_manifest_from_wasm(engine: &Engine, wasm_path: &Path) -> Arcell
     let imports: HashMap<String, ComponentItemSpec> = component_type
         .imports(engine)
         .map(|(name, item)| {
-            let spec = item.to_spec(engine).unwrap_or_else(|e| {
-                ComponentItemSpec::Unknown {
-                    debug: Some(format!("Import '{}': {:?}", name, e)),
-                }
+            let spec = item.to_spec(engine).unwrap_or_else(|e| ComponentItemSpec::Unknown {
+                debug: Some(format!("Import '{}': {:?}", name, e)),
             });
             (name.into(), spec)
         })

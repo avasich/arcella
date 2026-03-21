@@ -12,17 +12,16 @@
 //! Uses `thiserror` to define structured errors and `anyhow` for convenient propagation.
 //! All modules should return `Result<T, ArcellaError>` for internal logic,
 //! and `anyhow::Result<T>` (aliased as `Result<T>`) for top-level functions like `main`.
-//! 
+//!
 
 use std::path::PathBuf;
+
+use arcella_types::ArcellaTypeError;
+use ministate::MiniStateError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
-use arcella_types::ArcellaTypeError;
-use crate::wasmtime::ArcellaWasmtimeError;
-use ministate::MiniStateError;
-
-use crate::utils::ArcellaUtilsError;
+use crate::{utils::ArcellaUtilsError, wasmtime::ArcellaWasmtimeError};
 
 /// The root error type for all Arcella-specific failures.
 #[derive(Error, Debug)]
@@ -37,16 +36,11 @@ pub enum ArcellaError {
 
     /// IO error with associated path for better diagnostics
     #[error("I/O error at {path:?}: {source}")]
-    IoWithPath {
-        source: std::io::Error,
-        path: PathBuf,
-    },
+    IoWithPath { source: std::io::Error, path: PathBuf },
 
     /// Invalid argument provided.
     #[error("Invalid argument: {message}")]
-    InvalidArgument {
-        message: String,
-    },
+    InvalidArgument { message: String },
 
     /// Failed to parse WebAssembly Text Format (`.wat`).
     #[error("WAT parsing error: {0}")]
@@ -58,7 +52,7 @@ pub enum ArcellaError {
 
     /// JSON serialization/deserialization error.
     #[error("JSON error: {0}")]
-    Json(#[from] serde_json::Error), 
+    Json(#[from] serde_json::Error),
 
     /// Task join error.
     #[error("Task join error: {0}")]
@@ -79,16 +73,16 @@ pub enum ArcellaError {
     ModuleNotInstalled(String),
 
     #[error("Arcella Wasmtime error: {0}")]
-    ArcellaWasmtimeError (#[from] ArcellaWasmtimeError),    
+    ArcellaWasmtimeError(#[from] ArcellaWasmtimeError),
 
     #[error("Arcella Utils error: {0}")]
-    ArcellaUtilsError (#[from] ArcellaUtilsError),  
+    ArcellaUtilsError(#[from] ArcellaUtilsError),
 
     #[error("Arcella Type error: {0}")]
-    ArcellaTypeError (#[from] ArcellaTypeError),
-    
+    ArcellaTypeError(#[from] ArcellaTypeError),
+
     #[error("MiniState error: {0}")]
-    MiniStateError (#[from] MiniStateError), 
+    MiniStateError(#[from] MiniStateError),
 
     #[error("Wasmtime error: {0}")]
     WasmtimeError(#[from] wasmtime::Error),
@@ -101,7 +95,6 @@ pub enum ArcellaError {
 
     #[error("Memory too small: {0}")]
     MemoryTooLarge(u32),
-
 }
 
 /// Convenient alias for `Result<T, ArcellaError>`.

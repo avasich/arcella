@@ -51,31 +51,35 @@ impl std::fmt::Display for ConfigLoadWarning {
         match self {
             ConfigLoadWarning::Internal(msg) => {
                 write!(f, "{}", msg)
-            }
+            },
             ConfigLoadWarning::NullValueDetected { key, file } => {
                 write!(f, "Null value found for key '{}' in file {:?}", key, file)
-            }
+            },
             ConfigLoadWarning::ValueError { key, error, file } => {
                 write!(f, "Error processing value for key '{}' in file {:?}: {}", key, file, error)
-            }
+            },
             ConfigLoadWarning::DuplicateInclude { path, included_from } => {
-                write!(f, "Duplicate include path '{:?}' found, already included from {:?}", path, included_from)
-            }
+                write!(
+                    f,
+                    "Duplicate include path '{:?}' found, already included from {:?}",
+                    path, included_from
+                )
+            },
             ConfigLoadWarning::RetriedProcessing { path } => {
                 write!(f, "Retried processing of config file {:?}", path)
-            }
+            },
             ConfigLoadWarning::SkippedInvalidFile { path } => {
                 write!(f, "Skipped invalid file in includes: {:?}", path)
-            }
+            },
             ConfigLoadWarning::UnknownTomlType { key, type_name, file } => {
                 write!(f, "Unknown TOML type '{}' for key '{}' in file {:?}", type_name, key, file)
-            }
+            },
             ConfigLoadWarning::MaxDepthReached { path } => {
                 write!(f, "Maximum include depth reached for file {:?}", path)
-            }
+            },
             ConfigLoadWarning::Pruned { path } => {
                 write!(f, "Pruned file {:?}", path)
-            }
+            },
         }
     }
 }

@@ -41,34 +41,25 @@ pub enum AlmeCommand {
 
     /// Install a module: `cmd = "module:install"`, args = { "path": "..." }
     #[serde(rename = "module:install")]
-    ModuleInstall {
-        path: String,
-    },
+    ModuleInstall { path: String },
 
     /// Deploy from file: `cmd = "deploy"`, args = { "file": "..." }
     #[serde(rename = "module:deploy")]
-    ModuleDeploy {
-        file: String,
-    },
+    ModuleDeploy { file: String },
 
     /// Start a deployment by ID
     #[serde(rename = "module:start")]
-    ModuleStart {
-        deployment_id: String,
-    },
+    ModuleStart { deployment_id: String },
 
     /// Stop a deployment by ID
     #[serde(rename = "module:stop")]
-    ModuleStop {
-        deployment_id: String,
-    },
-
+    ModuleStop { deployment_id: String },
 }
 
 /// An ALME request sent by a client.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AlmeRequest {
-     #[serde(flatten)]
+    #[serde(flatten)]
     pub command: AlmeCommand,
 }
 

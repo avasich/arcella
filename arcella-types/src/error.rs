@@ -11,7 +11,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ArcellaError {
-    
     /// Invalid or missing module manifest.
     #[error("Manifest error: {0}")]
     Manifest(String),
@@ -27,7 +26,6 @@ pub enum ArcellaError {
     /// Invalid module ID version.
     #[error("Invalid module ID version: {0}")]
     InvalidModuleIdVersion(String),
-
 }
 
 /// Result type alias for `arcella-wasmtime` operations.

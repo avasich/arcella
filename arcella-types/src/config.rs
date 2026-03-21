@@ -19,10 +19,11 @@
 //! It also includes [`ConfigData`], a utility for managing hierarchical configurations
 //! where keys like `arcella.log.level` can be grouped into logical sections.
 
+use std::collections::HashMap;
+
 use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Represents a specific error that occurred during data processing.
 ///
@@ -164,9 +165,7 @@ impl ConfigData {
                 }
                 current_path.push_str(part);
 
-                let parent_section = sections
-                    .entry(old_path.clone())
-                        .or_default();
+                let parent_section = sections.entry(old_path.clone()).or_default();
 
                 if j == parts.len() - 1 {
                     parent_section.push(SectionEntry::ValueKey(i));
@@ -175,13 +174,9 @@ impl ConfigData {
                     if !parent_section.contains(&current_entry) {
                         parent_section.push(current_entry);
                     }
-                    let _ = sections
-                        .entry(current_path.clone())
-                            .or_default();
+                    let _ = sections.entry(current_path.clone()).or_default();
                 }
-
             }
-
         }
 
         sections.sort_keys();
@@ -230,7 +225,8 @@ impl ConfigData {
     /// `Some(Vec<usize>)` containing the indices if the section exists, otherwise `None`.
     pub fn get_section_keys(&self, section: &str) -> Option<Vec<usize>> {
         self.sections.get(section).map(|entries| {
-            entries.iter()
+            entries
+                .iter()
                 .filter_map(|entry| match entry {
                     SectionEntry::ValueKey(i) => Some(*i),
                     SectionEntry::SubSection(_) => None,
@@ -250,14 +246,15 @@ impl ConfigData {
     /// `Some(Vec<String>)` containing the names of sub-sections if the section exists, otherwise `None`.
     pub fn get_subsection_names(&self, section: &str) -> Option<Vec<String>> {
         self.sections.get(section).map(|entries| {
-            entries.iter()
+            entries
+                .iter()
                 .filter_map(|entry| match entry {
                     SectionEntry::ValueKey(_) => None,
                     SectionEntry::SubSection(name) => Some(name.clone()),
                 })
                 .collect()
         })
-    }    
+    }
 
     /// Retrieves the key-value pairs belonging to the specified section.
     ///
@@ -355,7 +352,10 @@ mod tests {
         let log_section = config.get_section_data("arcella.log").unwrap();
         assert_eq!(log_section.len(), 2);
         assert_eq!(log_section.get("arcella.log.level"), Some(&&Value::String("info".to_string())));
-        assert_eq!(log_section.get("arcella.log.file"), Some(&&Value::String("log.txt".to_string())));
+        assert_eq!(
+            log_section.get("arcella.log.file"),
+            Some(&&Value::String("log.txt".to_string()))
+        );
 
         let arcella_section = config.get_section_data("arcella").unwrap();
         assert_eq!(arcella_section.len(), 0); // Includes log.file, log.level, modules.path
@@ -392,5 +392,5 @@ mod tests {
         // Check subsections for "arcella.log" (also no sub-sections)
         let log_subsections = config.get_subsection_names("arcella.log").unwrap();
         assert_eq!(log_subsections.len(), 0);
-    }    
+    }
 }

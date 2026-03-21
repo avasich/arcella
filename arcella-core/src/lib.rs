@@ -7,13 +7,13 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
+pub mod cache;
 pub mod config;
+pub mod engine;
+mod error;
+mod manifest;
 pub mod runtime;
 pub mod storage;
-pub mod cache;
-pub mod engine;
-mod manifest;
-mod error;
 mod utils;
 mod wasmtime;
 

@@ -7,11 +7,13 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+};
 
 use flexicon::adaptive::{FromName, NamedMap};
+use serde::{Deserialize, Serialize};
 
 use crate::spec::ComponentItemSpec;
 
@@ -105,8 +107,9 @@ impl From<HashMap<String, ComponentItemSpec>> for InterfaceList {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn test_empty_interface_list() {
@@ -139,7 +142,7 @@ mod tests {
         match &list.0["wasi:http@0.2.0"] {
             ComponentItemSpec::Unknown { debug } => {
                 assert_eq!(debug.as_deref(), Some("from registry"));
-            }
+            },
             _ => panic!("expected Unknown"),
         }
     }
@@ -305,9 +308,12 @@ mod tests {
         );
         let list = InterfaceList::from(map);
         assert_eq!(list.0.len(), 1);
-        assert_eq!(list.0["test"], ComponentItemSpec::Unknown {
-            debug: Some("direct".to_string())
-        });
+        assert_eq!(
+            list.0["test"],
+            ComponentItemSpec::Unknown {
+                debug: Some("direct".to_string())
+            }
+        );
     }
 
     #[test]

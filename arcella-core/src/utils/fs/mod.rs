@@ -19,8 +19,11 @@
 //! It is designed to be used by the Arcella runtime and other tools that need
 //! to process TOML-based configurations in a consistent way.
 
-use std::env;
-use std::path::{Path, PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
+
 use tokio::fs;
 use uuid::Uuid;
 
@@ -30,7 +33,7 @@ use super::error::{ArcellaUtilsError, ArcellaUtilsResult};
 ///
 /// The function follows this priority order:
 /// 1. If the executable is located in a `bin` subdirectory and if parent of `bin` is not root
-///    directory, the parent of `bin` is use. 
+///    directory, the parent of `bin` is use.
 /// 2. If the current directory (where the executable is run from) contains a `config` subdirectory,
 ///    the current directory is used.
 /// 3. Otherwise, the user's home directory joined with `.arcella` is used.
@@ -107,11 +110,10 @@ pub async fn create_temp_subdir(
 
     let temp_path = parent_dir.join(temp_name);
 
-    fs::create_dir_all(&temp_path).await
-        .map_err(|e| ArcellaUtilsError::IoWithPath {
-            source: e,
-            path: temp_path.clone(),
-        })?;
+    fs::create_dir_all(&temp_path).await.map_err(|e| ArcellaUtilsError::IoWithPath {
+        source: e,
+        path: temp_path.clone(),
+    })?;
 
     Ok(temp_path)
 }
@@ -159,20 +161,19 @@ pub async fn copy_files_to_dir(
         .map(|src_path| {
             let target_dir = target_dir.to_path_buf();
             async move {
-                let file_name = src_path
-                    .file_name()
-                    .ok_or_else(|| ArcellaUtilsError::InvalidArgument {
+                let file_name =
+                    src_path.file_name().ok_or_else(|| ArcellaUtilsError::InvalidArgument {
                         message: format!("File has no name: {:?}", src_path),
                     })?;
 
                 let dest_path = target_dir.join(file_name);
 
-                fs::copy(src_path, &dest_path)
-                    .await
-                    .map_err(|e| ArcellaUtilsError::IoWithPath {
+                fs::copy(src_path, &dest_path).await.map_err(|e| {
+                    ArcellaUtilsError::IoWithPath {
                         source: e,
                         path: src_path.clone(),
-                    })?;
+                    }
+                })?;
 
                 let result: ArcellaUtilsResult<PathBuf> = Ok(dest_path);
                 result
@@ -192,7 +193,7 @@ pub async fn copy_files_to_dir(
                 file.sync_all().await?;
                 Ok::<(), ArcellaUtilsError>(())
             })
-            .collect();    
+            .collect();
 
         futures::future::try_join_all(file_sync_futures).await?;
     }
@@ -219,16 +220,14 @@ pub async fn copy_files_to_dir(
 ///
 /// - `IoWithPath`: if the directory cannot be opened or synced.
 pub async fn sync_directory(dir: &Path) -> ArcellaUtilsResult<()> {
-    let file = fs::File::open(dir).await
-        .map_err(|e| ArcellaUtilsError::IoWithPath {
-            source: e,
-            path: dir.to_path_buf(),
-        })?;
-    file.sync_all().await
-        .map_err(|e| ArcellaUtilsError::IoWithPath {
-            source: e,
-            path: dir.to_path_buf(),
-        })?;
+    let file = fs::File::open(dir).await.map_err(|e| ArcellaUtilsError::IoWithPath {
+        source: e,
+        path: dir.to_path_buf(),
+    })?;
+    file.sync_all().await.map_err(|e| ArcellaUtilsError::IoWithPath {
+        source: e,
+        path: dir.to_path_buf(),
+    })?;
     Ok(())
 }
 
@@ -245,9 +244,8 @@ pub async fn sync_directory(dir: &Path) -> ArcellaUtilsResult<()> {
 pub async fn atomic_rename(src: PathBuf, dst: PathBuf) -> Result<(), ArcellaUtilsError> {
     let src_for_error = src.clone();
 
-    tokio::task::spawn_blocking(move || {
-        std::fs::rename(&src, &dst)
-    }).await
+    tokio::task::spawn_blocking(move || std::fs::rename(&src, &dst))
+        .await
         .map_err(|e| ArcellaUtilsError::IoWithPath {
             source: std::io::Error::other(format!("Spawn blocking for rename failed: {}", e)),
             path: src_for_error.clone(),
@@ -277,28 +275,21 @@ pub fn base_name_from_file_with_ext<P: AsRef<Path>>(
     ext: &str,
 ) -> ArcellaUtilsResult<String> {
     let path = path.as_ref();
-    let file_name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| ArcellaUtilsError::InvalidArgument {
+    let file_name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+        ArcellaUtilsError::InvalidArgument {
             message: "File has no valid UTF-8 name".into(),
-        })?;
+        }
+    })?;
 
     let expected_suffix = format!(".{}", ext);
     if !file_name.ends_with(&expected_suffix) {
         return Err(ArcellaUtilsError::InvalidArgument {
-            message: format!(
-                "File '{}' does not have extension '{}'",
-                file_name, ext
-            ),
+            message: format!("File '{}' does not have extension '{}'", file_name, ext),
         });
     }
     if file_name.len() <= expected_suffix.len() {
         return Err(ArcellaUtilsError::InvalidArgument {
-            message: format!(
-                "Filename '{}' is too short to have extension '{}'",
-                file_name, ext
-            ),
+            message: format!("Filename '{}' is too short to have extension '{}'", file_name, ext),
         });
     }
 
@@ -355,7 +346,11 @@ pub fn sibling_path_with_suffix<P: AsRef<Path>>(original: P, suffix: &str) -> Pa
 /// Constructs the expected suffix path for a given base name.
 ///
 /// Example: `"web"` → `"web.deployment.toml"`
-pub fn file_path_from_base_and_extension<P: AsRef<Path>>(base_dir: P, base_name: &str, suffix: &str) -> PathBuf {
+pub fn file_path_from_base_and_extension<P: AsRef<Path>>(
+    base_dir: P,
+    base_name: &str,
+    suffix: &str,
+) -> PathBuf {
     base_dir.as_ref().join(format!("{}.{}", base_name, suffix))
 }
 
@@ -365,12 +360,10 @@ mod tests {
 
     #[test]
     fn test_base_name_from_file_with_ext() {
+        assert_eq!(base_name_from_file_with_ext("app.wasm", "wasm").unwrap(), "app");
         assert_eq!(
-            base_name_from_file_with_ext("app.wasm", "wasm").unwrap(),
-            "app"
-        );
-        assert_eq!(
-            base_name_from_file_with_ext("hello-world@1.0.0.deployment.toml", "deployment.toml").unwrap(),
+            base_name_from_file_with_ext("hello-world@1.0.0.deployment.toml", "deployment.toml")
+                .unwrap(),
             "hello-world@1.0.0"
         );
         assert!(base_name_from_file_with_ext("bad.txt", "wasm").is_err());
@@ -392,6 +385,4 @@ mod tests {
         let toml = sibling_path_with_suffix(path, ".component.toml");
         assert_eq!(toml, Path::new("/a/b/app.component.toml"));
     }
-
 }
-

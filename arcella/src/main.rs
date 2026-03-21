@@ -7,19 +7,12 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use clap::Parser;
 use std::sync::Arc;
+
+use arcella_core::{ArcellaError, ArcellaResult, cache, config, runtime, storage};
+use clap::Parser;
 use tokio::sync::RwLock;
 
-use arcella_core::{
-    cache,
-    config,
-    runtime,
-    storage,
-    ArcellaError,
-    ArcellaResult,
-};    
-    
 mod alme;
 mod log;
 
@@ -30,9 +23,8 @@ struct Cli {}
 
 #[tokio::main]
 async fn main() -> ArcellaResult<()> {
-
     // 1. Load configuration (e.g., paths, runtime options)
-    let _ = Cli::parse(); 
+    let _ = Cli::parse();
     let (config_data, warnings) = config::load().await?;
     let config = Arc::new(config_data);
 
@@ -51,7 +43,7 @@ async fn main() -> ArcellaResult<()> {
         Err(e) => {
             tracing::error!("Failed to initialize storage: {}", e);
             return Err(e);
-        }
+        },
     };
     let storage = Arc::new(storage);
     tracing::debug!("Initialize storage");
@@ -59,13 +51,14 @@ async fn main() -> ArcellaResult<()> {
     let cache = Arc::new(cache::ModuleCache::new(&config).await?);
     tracing::debug!("Initialize cache");
 
-    let runtime = match runtime::ArcellaRuntime::new(config.clone(), storage.clone(), cache.clone()).await {
-        Ok(runtime) => runtime,
-        Err(e) => {
-            tracing::error!("Failed to initialize runtime: {}", e);
-            return Err(e);
-        }
-    };
+    let runtime =
+        match runtime::ArcellaRuntime::new(config.clone(), storage.clone(), cache.clone()).await {
+            Ok(runtime) => runtime,
+            Err(e) => {
+                tracing::error!("Failed to initialize runtime: {}", e);
+                return Err(e);
+            },
+        };
     let runtime = Arc::new(RwLock::new(runtime));
     tracing::debug!("Initialize core runtime");
 
@@ -74,7 +67,7 @@ async fn main() -> ArcellaResult<()> {
         Err(e) => {
             tracing::error!("Failed to start ALME: {}", e);
             return Err(e);
-        }
+        },
     };
     tracing::info!("Starting ALME server");
 
@@ -89,7 +82,7 @@ async fn main() -> ArcellaResult<()> {
     }
 
     tracing::info!("Shutting down");
-        
+
     // Configure the engine
     /*let mut config = Config::default();
     config.wasm_backtrace_details(WasmBacktraceDetails::Enable);
@@ -136,7 +129,6 @@ async fn main() -> ArcellaResult<()> {
     drop(log_guard);
 
     Ok(())
-    
 }
 
 /*fn load_module_bytes(path: &PathBuf) -> ArcellaResult<Vec<u8>> {

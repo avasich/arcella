@@ -49,10 +49,10 @@
 //!
 //! See also: [`arcella_types::manifest::ComponentManifest`], [`wasmtime::Engine`]
 
-use derive_builder::Builder;
 use std::path::Path;
 
 use arcella_types::manifest::ComponentManifest;
+use derive_builder::Builder;
 
 use crate::{ArcellaError, ArcellaResult};
 
@@ -298,7 +298,6 @@ impl Default for WasmEngineConfig {
 impl WasmEngineConfig {
     /// A reasonable maximum memory limit: 4 GiB.
     pub const MAX_REASONABLE_PAGES: u32 = 65536;
-
     /// A reasonable minimum memory limit: 64 KiB.
     pub const MIN_REASONABLE_PAGES: u32 = 1;
 
@@ -306,7 +305,7 @@ impl WasmEngineConfig {
     pub fn enable_threads(mut self, value: bool) -> Self {
         self.enable_threads = Some(value);
         self
-    }    
+    }
 
     /// Applies a configuration profile, setting feature values
     /// **only if they have not been explicitly set already**.
@@ -320,32 +319,32 @@ impl WasmEngineConfig {
             match feature {
                 WasmFeature::ComponentModel if self.enable_component_model.is_none() => {
                     self.enable_component_model = Some(true);
-                }
+                },
                 WasmFeature::ReferenceTypes if self.enable_reference_types.is_none() => {
                     self.enable_reference_types = Some(true);
-                }
+                },
                 WasmFeature::Simd if self.enable_simd.is_none() => {
                     self.enable_simd = Some(true);
-                }
+                },
                 WasmFeature::Gc if self.enable_gc.is_none() => {
                     self.enable_gc = Some(true);
-                }
+                },
                 WasmFeature::Threads if self.enable_threads.is_none() => {
                     self.enable_threads = Some(true);
-                }
+                },
                 WasmFeature::BulkMemory if self.enable_bulk_memory.is_none() => {
                     self.enable_bulk_memory = Some(true);
-                }
+                },
                 WasmFeature::MultiValue if self.enable_multi_value.is_none() => {
                     self.enable_multi_value = Some(true);
-                }
+                },
                 WasmFeature::TailCall if self.enable_tail_call.is_none() => {
                     self.enable_tail_call = Some(true);
-                }
+                },
                 WasmFeature::FunctionReferences if self.enable_function_references.is_none() => {
                     self.enable_function_references = Some(true);
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -417,9 +416,9 @@ impl WasmEngineCompatibilityReport {
     /// This is important because without Component Model, working with WIT interfaces is impossible,
     /// and installing a component that depends on them would fail.
     pub fn has_critical_gaps(&self) -> bool {
-        self.features.iter().any(|f| {
-            f.arcella_name == "component_model" && f.requested && !f.supported
-        })
+        self.features
+            .iter()
+            .any(|f| f.arcella_name == "component_model" && f.requested && !f.supported)
     }
 
     /// Indicates whether the engine can be used, even if not all features are available.
@@ -529,8 +528,9 @@ pub trait WasmEngine: WasmEngineCapabilities + Send + Sync {
 #[cfg(test)]
 mod tests {
     // ... (the original test code remains unchanged)
-    use super::*;
     use std::collections::HashMap;
+
+    use super::*;
 
     struct MockWasmEngine {
         supported_features_map: HashMap<&'static str, (bool, String, Option<String>)>,
@@ -543,34 +543,19 @@ mod tests {
                 "component_model",
                 (true, "wasm_component_model".to_string(), Some("Wasmtime >=12".to_string())),
             );
-            map.insert(
-                "reference_types",
-                (true, "wasm_reference_types".to_string(), None),
-            );
+            map.insert("reference_types", (true, "wasm_reference_types".to_string(), None));
             map.insert(
                 "simd",
                 (false, "wasm_simd".to_string(), Some("only on x86_64".to_string())),
             );
-            map.insert(
-                "gc",
-                (false, "wasm_gc".to_string(), Some("not implemented".to_string())),
-            );
-            map.insert(
-                "bulk_memory",
-                (true, "wasm_bulk_memory".to_string(), None),
-            );
-            map.insert(
-                "multi_value",
-                (true, "wasm_multi_value".to_string(), None),
-            );
+            map.insert("gc", (false, "wasm_gc".to_string(), Some("not implemented".to_string())));
+            map.insert("bulk_memory", (true, "wasm_bulk_memory".to_string(), None));
+            map.insert("multi_value", (true, "wasm_multi_value".to_string(), None));
             map.insert(
                 "threads",
                 (false, "wasm_threads".to_string(), Some("disabled by default".to_string())),
             );
-            map.insert(
-                "tail_call",
-                (true, "wasm_tail_call".to_string(), None),
-            );
+            map.insert("tail_call", (true, "wasm_tail_call".to_string(), None));
             map.insert(
                 "function_references",
                 (false, "wasm_function_references".to_string(), None),
@@ -585,7 +570,9 @@ mod tests {
                 .iter()
                 .map(|&feature| {
                     let arcella_name = feature.arcella_name();
-                    if let Some((supported, engine_name, notes)) = self.supported_features_map.get(arcella_name) {
+                    if let Some((supported, engine_name, notes)) =
+                        self.supported_features_map.get(arcella_name)
+                    {
                         SupportedFeature {
                             arcella_name,
                             requested: false,
@@ -637,8 +624,7 @@ mod tests {
 
     #[test]
     fn test_config_with_profile_wasi_only() {
-        let config = WasmEngineConfig::default()
-        .with_profile(WasmFeatureGroup::WasiOnly);
+        let config = WasmEngineConfig::default().with_profile(WasmFeatureGroup::WasiOnly);
 
         assert_eq!(config.enable_component_model, None); // not part of WasiOnly
         assert_eq!(config.enable_bulk_memory, Some(true));
@@ -649,8 +635,7 @@ mod tests {
 
     #[test]
     fn test_config_with_profile_component_model() {
-        let config = WasmEngineConfig::default()
-        .with_profile(WasmFeatureGroup::ComponentModel);
+        let config = WasmEngineConfig::default().with_profile(WasmFeatureGroup::ComponentModel);
 
         assert_eq!(config.enable_component_model, Some(true));
         assert_eq!(config.enable_bulk_memory, Some(true));
@@ -768,6 +753,9 @@ mod tests {
     #[test]
     fn test_feature_and_group_descriptions() {
         assert_eq!(WasmFeature::ComponentModel.description(), "WebAssembly Component Model");
-        assert_eq!(WasmFeatureGroup::ComponentModel.description(), "Standard Component Model with WIT interfaces");
+        assert_eq!(
+            WasmFeatureGroup::ComponentModel.description(),
+            "Standard Component Model with WIT interfaces"
+        );
     }
 }

@@ -8,22 +8,19 @@
 // except according to those terms.
 
 use std::sync::Arc;
+
+use arcella_types::module_id::ModuleId;
+use ministate::StateManager;
 use tokio::sync::{Mutex, RwLock};
 use wasmtime::Engine;
 
 use crate::{
+    ArcellaResult,
     cache::ModuleCache,
     config::ArcellaConfig,
-    runtime::{
-        state::ArcellaState,
-        ArcellaMutation,
-    },
+    runtime::{ArcellaMutation, state::ArcellaState},
     storage::StorageManager,
-    ArcellaResult,
 };
-
-use ministate::StateManager;
-use arcella_types::module_id::ModuleId;
 
 type InstallLocks = Mutex<std::collections::HashMap<ModuleId, Arc<Mutex<()>>>>;
 
@@ -41,9 +38,7 @@ pub struct ArcellaExecutionContext {
 }
 
 impl ArcellaExecutionContext {
-    pub async fn from_runtime(
-        runtime: &Arc<RwLock<super::ArcellaRuntime>>,
-    ) -> ArcellaResult<Self> {
+    pub async fn from_runtime(runtime: &Arc<RwLock<super::ArcellaRuntime>>) -> ArcellaResult<Self> {
         let runtime_guard = runtime.read().await;
 
         Ok(ArcellaExecutionContext {

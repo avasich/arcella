@@ -41,17 +41,11 @@ use std::path::Path;
 
 use arcella_types::config::Value as TomlValue;
 
-use super::{
-    ConfigLoadWarning,
-    toml_files::collect_toml_includes,
-    types::*
-};
-
-use crate::{ArcellaError, ArcellaResult};
-
-use crate::utils::{
-    toml::parse_and_collect,
-    types::*,
+use super::{ConfigLoadWarning, toml_files::collect_toml_includes, types::*};
+use crate::{
+    ArcellaError,
+    ArcellaResult,
+    utils::{toml::parse_and_collect, types::*},
 };
 
 /// Recursively loads configuration files starting from `config_file_path`, including files specified in `includes`.
@@ -100,21 +94,22 @@ pub async fn load_config_recursive(
     if state.visited_paths.contains(config_file_path) {
         state.warnings.push(ConfigLoadWarning::DuplicateInclude {
             path: config_file_path.to_path_buf(),
-            included_from: included_from.map(|p| p.to_path_buf())
+            included_from: included_from
+                .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| config_file_path.to_path_buf()),
         });
         return Ok(vec![]); // Not an error, just break the recursion
     }
 
     // Read file content first; only mark as visited after successful read
-    // to avoid poisoning the state on transient I/O errors.    
+    // to avoid poisoning the state on transient I/O errors.
 
-    let content = tokio::fs::read_to_string(config_file_path)
-        .await
-        .map_err(|e| ArcellaError::IoWithPath {
+    let content = tokio::fs::read_to_string(config_file_path).await.map_err(|e| {
+        ArcellaError::IoWithPath {
             source: e,
             path: config_file_path.to_path_buf(),
-        })?;
+        }
+    })?;
 
     // Now it's safe to mark the file as visited
     state.visited_paths.insert(config_file_path.to_path_buf());
@@ -127,7 +122,8 @@ pub async fn load_config_recursive(
         file_idx,
         config_file_path,
         current_depth,
-    ).await?;
+    )
+    .await?;
 
     // visited_paths.remove(config_file_path); // Optional, if cycles are checked only within one traversal path
 
@@ -160,15 +156,14 @@ pub async fn load_config_recursive_from_content(
     config_file_path: &Path,
     current_depth: usize,
 ) -> ArcellaResult<Vec<TomlFileData>> {
-
     let (config, result) = parse_and_collect(&content, &params.prefix, file_idx)?;
-    if result == TraversalResult::Pruned{
+    if result == TraversalResult::Pruned {
         state.warnings.push(ConfigLoadWarning::Pruned {
             path: config_file_path.to_path_buf(),
         });
     }
 
-     // --- Check values for Null or other issues (example) ---
+    // --- Check values for Null or other issues (example) ---
     // This could be extracted into a separate function for checking TomlFileData
     for (key, (value, _)) in &config.values {
         if matches!(value, TomlValue::Null) {
@@ -182,11 +177,8 @@ pub async fn load_config_recursive_from_content(
     // Resolve and expand includes (e.g., globs, directories) into concrete file paths.
     // The result is sorted lexicographically to ensure deterministic loading order.
     // Invalid or missing paths are skipped and recorded as warnings.
-    let include_paths = collect_toml_includes(
-        &config.includes, 
-        &params.config_dir, 
-        &mut state.warnings,
-    ).await?;
+    let include_paths =
+        collect_toml_includes(&config.includes, &params.config_dir, &mut state.warnings).await?;
 
     let mut all_configs = vec![config];
 
@@ -203,7 +195,7 @@ pub async fn load_config_recursive_from_content(
         // Await the pinned future
         let mut sub_configs = sub_configs_future.await?;
         all_configs.append(&mut sub_configs);
-    };
+    }
 
     Ok(all_configs)
 }
@@ -222,23 +214,15 @@ pub async fn load_config_recursive_from_file(
     state: &mut ConfigLoadState,
     config_file_path: &Path,
 ) -> ArcellaResult<Vec<TomlFileData>> {
-
-    load_config_recursive(
-        params,
-        state,
-        config_file_path, 
-        None,
-        0,
-    ).await
-
+    load_config_recursive(params, state, config_file_path, None, 0).await
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use tempfile::TempDir;
+    use std::{collections::HashSet, fs};
+
     use indexmap::IndexSet;
-    use std::collections::HashSet;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -246,7 +230,7 @@ mod tests {
     async fn test_load_config_recursive_simple() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path();
-        let mut state  = ConfigLoadState {
+        let mut state = ConfigLoadState {
             config_files: IndexSet::new(),
             visited_paths: HashSet::new(),
             warnings: Vec::new(),
@@ -265,25 +249,25 @@ mod tests {
             config_dir: config_dir.to_path_buf(),
         };
 
-        let configs = load_config_recursive_from_file(
-            &params,
-            &mut state,
-            &main_config_path,
-        ).await.unwrap();
+        let configs =
+            load_config_recursive_from_file(&params, &mut state, &main_config_path).await.unwrap();
 
         assert_eq!(configs.len(), 1); // Main config only
         assert!(state.warnings.is_empty()); // No warnings expected
 
         // Check if the main config has the expected value
         let main_config = &configs[0];
-        assert_eq!(main_config.values.get("arcella.server.port").unwrap().0, TomlValue::Integer(8080));
+        assert_eq!(
+            main_config.values.get("arcella.server.port").unwrap().0,
+            TomlValue::Integer(8080)
+        );
     }
 
     #[tokio::test]
     async fn test_load_config_recursive_with_includes() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path();
-        let mut state  = ConfigLoadState {
+        let mut state = ConfigLoadState {
             config_files: IndexSet::new(),
             visited_paths: HashSet::new(),
             warnings: Vec::new(),
@@ -310,11 +294,8 @@ mod tests {
             config_dir: config_dir.to_path_buf(),
         };
 
-        let configs = load_config_recursive_from_file(
-            &params,
-            &mut state,
-            &main_config_path,
-        ).await.unwrap();
+        let configs =
+            load_config_recursive_from_file(&params, &mut state, &main_config_path).await.unwrap();
 
         assert_eq!(configs.len(), 2); // Main config and included db.toml
         assert!(state.warnings.is_empty()); // No warnings expected
@@ -322,16 +303,25 @@ mod tests {
         // Check values from both configs
         let main_config = &configs[0];
         let db_config = &configs[1];
-        assert_eq!(main_config.values.get("arcella.server.port").unwrap().0, TomlValue::Integer(8080));
-        assert_eq!(db_config.values.get("arcella.database.host").unwrap().0, TomlValue::String("localhost".to_string()));
-        assert_eq!(db_config.values.get("arcella.database.port").unwrap().0, TomlValue::Integer(5432));
+        assert_eq!(
+            main_config.values.get("arcella.server.port").unwrap().0,
+            TomlValue::Integer(8080)
+        );
+        assert_eq!(
+            db_config.values.get("arcella.database.host").unwrap().0,
+            TomlValue::String("localhost".to_string())
+        );
+        assert_eq!(
+            db_config.values.get("arcella.database.port").unwrap().0,
+            TomlValue::Integer(5432)
+        );
     }
 
     #[tokio::test]
     async fn test_load_config_recursive_with_cycle() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path();
-        let mut state  = ConfigLoadState {
+        let mut state = ConfigLoadState {
             config_files: IndexSet::new(),
             visited_paths: HashSet::new(),
             warnings: Vec::new(),
@@ -358,32 +348,32 @@ mod tests {
             config_dir: config_dir.to_path_buf(),
         };
 
-        let configs = load_config_recursive_from_file(
-            &params,
-            &mut state,
-            &main_config_path,
-        ).await.unwrap();
+        let configs =
+            load_config_recursive_from_file(&params, &mut state, &main_config_path).await.unwrap();
 
         // Should load main.toml and cycle.toml once, then detect the cycle and stop.
         // The exact behavior might vary depending on the order of processing in collect_toml_includes,
         // but we expect at least one warning about the duplicate/cycle.
         assert!(configs.len() >= 1); // At least main.toml is loaded
         assert!(!state.warnings.is_empty()); // At least one warning for the cycle
-        assert!(state.warnings.iter().any(|w| matches!(w, ConfigLoadWarning::DuplicateInclude { .. })));
+        assert!(
+            state.warnings.iter().any(|w| matches!(w, ConfigLoadWarning::DuplicateInclude { .. }))
+        );
     }
 
     #[tokio::test]
     async fn test_load_config_recursive_depth_limit() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path();
-        let mut state  = ConfigLoadState {
+        let mut state = ConfigLoadState {
             config_files: IndexSet::new(),
             visited_paths: HashSet::new(),
             warnings: Vec::new(),
         };
 
         // Create a chain of files that exceeds MAX_CONFIG_DEPTH
-        for i in 0..=MAX_CONFIG_DEPTH + 2 { // Create more files than the limit
+        for i in 0..=MAX_CONFIG_DEPTH + 2 {
+            // Create more files than the limit
             let current_file = config_dir.join(format!("level_{}.toml", i));
             let mut content = format!("key_{} = {}", i, i);
             content.push_str(&format!("\nincludes = [\"level_{}.toml\"]", i + 1));
@@ -397,24 +387,23 @@ mod tests {
             config_dir: config_dir.to_path_buf(),
         };
 
-        let configs = load_config_recursive_from_file(
-            &params,
-            &mut state,
-            &root_file,
-        ).await.unwrap();
+        let configs =
+            load_config_recursive_from_file(&params, &mut state, &root_file).await.unwrap();
 
         // Should stop after MAX_CONFIG_DEPTH
         // The exact number of loaded configs might vary slightly depending on implementation details,
         // but the key point is that it stops and generates a warning.
         assert!(configs.len() <= MAX_CONFIG_DEPTH + 1); // At most MAX_DEPTH + 1 configs (including root)
-        assert!(state.warnings.iter().any(|w| matches!(w, ConfigLoadWarning::MaxDepthReached { .. })));
+        assert!(
+            state.warnings.iter().any(|w| matches!(w, ConfigLoadWarning::MaxDepthReached { .. }))
+        );
     }
 
     #[tokio::test]
     async fn test_load_config_recursive_file_not_found() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path();
-        let mut state  = ConfigLoadState {
+        let mut state = ConfigLoadState {
             config_files: IndexSet::new(),
             visited_paths: HashSet::new(),
             warnings: Vec::new(),
@@ -433,22 +422,23 @@ mod tests {
             config_dir: config_dir.to_path_buf(),
         };
 
-        let configs = load_config_recursive_from_file(
-            &params,
-            &mut state,
-            &main_config_path,
-        ).await;
+        let configs = load_config_recursive_from_file(&params, &mut state, &main_config_path).await;
 
         // Should return an error because nonexistent.toml is listed in includes
         assert!(configs.is_ok());
-        assert!(state.warnings.iter().any(|w| matches!(w, ConfigLoadWarning::SkippedInvalidFile { .. })));
+        assert!(
+            state
+                .warnings
+                .iter()
+                .any(|w| matches!(w, ConfigLoadWarning::SkippedInvalidFile { .. }))
+        );
     }
 
     #[tokio::test]
     async fn test_load_config_recursive_with_directory_in_includes() {
         let temp_dir = TempDir::new().unwrap();
         let config_dir = temp_dir.path();
-        let mut state  = ConfigLoadState {
+        let mut state = ConfigLoadState {
             config_files: IndexSet::new(),
             visited_paths: HashSet::new(),
             warnings: Vec::new(),
@@ -477,19 +467,21 @@ mod tests {
             config_dir: config_dir.to_path_buf(),
         };
 
-        let configs = load_config_recursive_from_file(
-            &params,
-            &mut state,
-            &main_config_path,
-        ).await.unwrap();
+        let configs =
+            load_config_recursive_from_file(&params, &mut state, &main_config_path).await.unwrap();
 
         assert_eq!(configs.len(), 2); // Main config and the file in subdir
         assert!(state.warnings.is_empty()); // No warnings expected
 
         let main_config = &configs[0];
         let sub_config = &configs[1];
-        assert_eq!(main_config.values.get("arcella.server.port").unwrap().0, TomlValue::Integer(8080));
-        assert_eq!(sub_config.values.get("arcella.logging.level").unwrap().0, TomlValue::String("info".to_string()));
+        assert_eq!(
+            main_config.values.get("arcella.server.port").unwrap().0,
+            TomlValue::Integer(8080)
+        );
+        assert_eq!(
+            sub_config.values.get("arcella.logging.level").unwrap().0,
+            TomlValue::String("info".to_string())
+        );
     }
-
 }

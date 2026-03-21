@@ -24,25 +24,26 @@
 //!
 //! If any step fails, temporary artifacts are cleaned up to avoid disk leakage.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-use crate::utils::fs::{
-    atomic_rename,
-    base_name_from_file_with_ext,
-    copy_files_to_dir,
-    create_temp_subdir,
-    sibling_path_with_suffix,
-    sync_directory,
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
 };
 
 use arcella_types::module_id::ModuleId;
 
 use crate::{
     ArcellaError,
-	ArcellaResult,
+    ArcellaResult,
     runtime::state::ArcellaState,
     storage::StorageManager,
+    utils::fs::{
+        atomic_rename,
+        base_name_from_file_with_ext,
+        copy_files_to_dir,
+        create_temp_subdir,
+        sibling_path_with_suffix,
+        sync_directory,
+    },
 };
 
 /// Represents a validated module package ready for installation.
@@ -122,16 +123,13 @@ impl InstallPackage {
     /// Returns `ArcellaError::InvalidArgument` if any expected file is missing
     /// in the staging directory.
     pub fn from_staging_dir(&self, staging_dir: PathBuf) -> ArcellaResult<Self> {
-        let staged_wasm = staging_dir.join(
-            self.wasm_path.file_name()
-                .ok_or_else(|| {
-                    let e = ArcellaError::InvalidArgument {
-                        message: "WASM file has no name".into(),
-                    };
-                    tracing::error!("{}", e);
-                    e
-                })?,
-        );
+        let staged_wasm = staging_dir.join(self.wasm_path.file_name().ok_or_else(|| {
+            let e = ArcellaError::InvalidArgument {
+                message: "WASM file has no name".into(),
+            };
+            tracing::error!("{}", e);
+            e
+        })?);
 
         let staged_component_toml = self
             .component_toml_path
@@ -228,7 +226,7 @@ impl InstallPackage {
 /// `Ok(InstallPackage)` if the path is valid, or an error with a human-readable message.
 pub async fn validate_install_package(wasm_path: &Path) -> ArcellaResult<InstallPackage> {
     if !wasm_path.is_file() {
-        let e = ArcellaError::InvalidArgument{
+        let e = ArcellaError::InvalidArgument {
             message: format!("Path is not a file: {:?}", wasm_path),
         };
         tracing::error!("{}", e);
@@ -241,18 +239,20 @@ pub async fn validate_install_package(wasm_path: &Path) -> ArcellaResult<Install
         Err(e) => {
             tracing::error!("{}", e);
             return Err(ArcellaError::ArcellaUtilsError(e));
-        }
+        },
     }
 
     // Construct expected sibling paths
     let component_toml_path = sibling_path_with_suffix(wasm_path, ".component.toml");
-    let deployment_template_path = sibling_path_with_suffix(wasm_path, ".deployment.template.toml");    
+    let deployment_template_path = sibling_path_with_suffix(wasm_path, ".deployment.template.toml");
 
     Ok(InstallPackage {
         package_dir: None,
         wasm_path: wasm_path.to_path_buf(),
         component_toml_path: component_toml_path.exists().then_some(component_toml_path),
-        deployment_template_path: deployment_template_path.exists().then_some(deployment_template_path),
+        deployment_template_path: deployment_template_path
+            .exists()
+            .then_some(deployment_template_path),
     })
 }
 
@@ -277,7 +277,7 @@ pub async fn prepare_install_package_in_temp(
         Err(e) => {
             tracing::error!("{}", e);
             return Err(e.into());
-        }
+        },
     };
 
     let source_files = package.existing_file_paths_owned();
@@ -285,8 +285,8 @@ pub async fn prepare_install_package_in_temp(
         Ok(vec) => vec,
         Err(e) => {
             tracing::error!("{}", e);
-            return Err(e.into());    
-        }
+            return Err(e.into());
+        },
     };
 
     package.from_staging_dir(staging_dir)
@@ -353,7 +353,7 @@ pub async fn install_module_files_to_storage(
         Err(e) => {
             tracing::error!("{}", e);
             return Err(e.into());
-        }
+        },
     };
 
     // Step 2: Copy all files into the temporary destination
@@ -363,7 +363,7 @@ pub async fn install_module_files_to_storage(
         Err(e) => {
             tracing::error!("{}", e);
             return Err(e.into());
-        }
+        },
     };
 
     // Step 3: Ensure directory entries are persisted
@@ -372,7 +372,7 @@ pub async fn install_module_files_to_storage(
         Err(e) => {
             tracing::error!("{}", e);
             return Err(e.into());
-        }
+        },
     };
 
     // Step 4: Atomically publish the module
@@ -382,7 +382,7 @@ pub async fn install_module_files_to_storage(
         Err(e) => {
             tracing::error!("{}", e);
             return Err(e.into());
-        }
+        },
     };
 
     // Step 5: Ensure the new module_id entry is visible in parent dir
@@ -391,7 +391,7 @@ pub async fn install_module_files_to_storage(
         Err(e) => {
             tracing::error!("{}", e);
             return Err(e.into());
-        }
+        },
     };
 
     Ok(final_dest_dir)
@@ -399,9 +399,11 @@ pub async fn install_module_files_to_storage(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use tempfile::TempDir;
     use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::*;
 
     mod install_package_tests {
         use super::*;
@@ -472,10 +474,7 @@ mod tests {
             let map = package.file_name_map();
             assert_eq!(map.len(), 2);
             assert_eq!(map.get(std::ffi::OsStr::new("test.wasm")), Some(&wasm.as_path()));
-            assert_eq!(
-                map.get(std::ffi::OsStr::new("my.component.toml")),
-                Some(&toml.as_path())
-            );
+            assert_eq!(map.get(std::ffi::OsStr::new("my.component.toml")), Some(&toml.as_path()));
         }
 
         #[test]
@@ -498,9 +497,8 @@ mod tests {
                 deployment_template_path: None,
             };
 
-            let staged_package = original_package
-                .from_staging_dir(staging_temp.path().to_path_buf())
-                .unwrap();
+            let staged_package =
+                original_package.from_staging_dir(staging_temp.path().to_path_buf()).unwrap();
 
             assert_eq!(staged_package.wasm_path, staged_wasm);
             assert_eq!(staged_package.component_toml_path, Some(staged_toml));

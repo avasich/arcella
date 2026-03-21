@@ -7,11 +7,10 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::{fmt, str::FromStr, sync::OnceLock};
+
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::fmt;
-use std::str::FromStr;
-use std::sync::OnceLock;
 
 use crate::error::{ArcellaError, ArcellaResult};
 
@@ -63,12 +62,13 @@ impl FromStr for ModuleId {
             Regex::new(r"^(?P<name>[a-zA-Z0-9_-]+)@(?P<version>\d+\.\d+\.\d+)$").unwrap()
         });
 
-        re.captures(s).ok_or_else(|| ArcellaError::InvalidModuleIdFormat(s.to_string()))
-            .and_then(|caps| {
+        re.captures(s).ok_or_else(|| ArcellaError::InvalidModuleIdFormat(s.to_string())).and_then(
+            |caps| {
                 let name = caps.name("name").unwrap().as_str().to_string();
                 let version = caps.name("version").unwrap().as_str().to_string();
                 ModuleId::new(name, version)
-            })
+            },
+        )
     }
 }
 
@@ -89,12 +89,9 @@ impl<'de> Deserialize<'de> for ModuleId {
 
         let helper = ModuleIdHelper::deserialize(deserializer)?;
         match helper {
-            ModuleIdHelper::String(s) => {
-                ModuleId::from_str(&s).map_err(serde::de::Error::custom)
-            }
-            ModuleIdHelper::Struct { name, version } => {
-                ModuleId::new(name, version).map_err(serde::de::Error::custom)
-            }
+            ModuleIdHelper::String(s) => ModuleId::from_str(&s).map_err(serde::de::Error::custom),
+            ModuleIdHelper::Struct { name, version } =>
+                ModuleId::new(name, version).map_err(serde::de::Error::custom),
         }
     }
 }
@@ -158,16 +155,16 @@ mod tests {
     #[test]
     fn test_invalid_names() {
         let invalid_names = vec![
-            "",                     // empty
-            "logger@",              // no version
-            "@1.0.0",               // no name
-            "logger@1.0",           // bad version format (only two parts)
-            "logger@1.0.0.0",       // too many parts
-            "logger@1.02.0",        // leading zero in minor
-            "logger@1.0.00",        // leading zero in patch
-            "logger@1.0.0a",        // non-numeric
+            "",                        // empty
+            "logger@",                 // no version
+            "@1.0.0",                  // no name
+            "logger@1.0",              // bad version format (only two parts)
+            "logger@1.0.0.0",          // too many parts
+            "logger@1.02.0",           // leading zero in minor
+            "logger@1.0.00",           // leading zero in patch
+            "logger@1.0.0a",           // non-numeric
             "logger with space@1.0.0", // invalid char
-            "logger!@1.0.0",        // invalid char
+            "logger!@1.0.0",           // invalid char
         ];
 
         for name in invalid_names {
@@ -182,14 +179,14 @@ mod tests {
         assert!(is_valid_simple_version("123.45.6"));
 
         // Invalid cases
-        assert!(!is_valid_simple_version("1.0"));        // too short
-        assert!(!is_valid_simple_version("1.0.0.0"));    // too long
-        assert!(!is_valid_simple_version("1.02.0"));     // leading zero
-        assert!(!is_valid_simple_version("1.0.00"));     // leading zero
-        assert!(!is_valid_simple_version("1.a.0"));      // non-digit
-        assert!(!is_valid_simple_version("1..0"));       // empty part
-        assert!(!is_valid_simple_version(""));           // empty
-        assert!(!is_valid_simple_version("01.0.0"));     // leading zero in major
+        assert!(!is_valid_simple_version("1.0")); // too short
+        assert!(!is_valid_simple_version("1.0.0.0")); // too long
+        assert!(!is_valid_simple_version("1.02.0")); // leading zero
+        assert!(!is_valid_simple_version("1.0.00")); // leading zero
+        assert!(!is_valid_simple_version("1.a.0")); // non-digit
+        assert!(!is_valid_simple_version("1..0")); // empty part
+        assert!(!is_valid_simple_version("")); // empty
+        assert!(!is_valid_simple_version("01.0.0")); // leading zero in major
     }
 
     #[test]

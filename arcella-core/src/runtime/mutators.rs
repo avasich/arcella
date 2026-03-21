@@ -7,12 +7,12 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use ministate::Mutator;
-
 use arcella_types::{
-    manifest::ComponentManifest, 
+    manifest::ComponentManifest,
     //deployment::DeploymentSpec
 };
+use ministate::Mutator;
+
 use super::state::ArcellaState;
 use crate::manifest::DeploymentSpec;
 
@@ -69,10 +69,12 @@ mod tests {
 
     #[cfg(test)]
     mod serialization_tests {
-        use super::*;
         use std::fs;
-        use tempfile::TempDir;
+
         use serde_json;
+        use tempfile::TempDir;
+
+        use super::*;
 
         #[test]
         fn test_install_module_jsonl_roundtrip() {
@@ -81,9 +83,7 @@ mod tests {
 
             // 1. Создаём мутацию
             let manifest = create_test_manifest().unwrap();
-            let mutation = InstallModule {
-                manifest: manifest.clone(),
-            };
+            let mutation = InstallModule { manifest: manifest.clone() };
 
             // 2. Сериализуем в JSONL (одна запись — одна строка)
             let json_line = serde_json::to_string(&mutation).unwrap();
@@ -102,7 +102,7 @@ mod tests {
             assert_eq!(restored.manifest.exports, mutation.manifest.exports);
             assert_eq!(restored.manifest.imports, mutation.manifest.imports);
         }
-    }    
+    }
 
     #[test]
     fn test_install_module() {
@@ -110,9 +110,7 @@ mod tests {
         let manifest = create_test_manifest().unwrap();
         let module_id = manifest.id.to_string();
 
-        let mutation = InstallModule {
-            manifest: manifest.clone(),
-        };
+        let mutation = InstallModule { manifest: manifest.clone() };
 
         // Применяем мутацию
         mutation.apply(&mut state);
@@ -120,7 +118,7 @@ mod tests {
         // Проверяем, что модуль появился
         assert!(state.installed_modules.contains_key(&module_id));
         assert_eq!(state.installed_modules.get(&module_id).unwrap(), &manifest);
-    }    
+    }
 
     #[test]
     fn test_install_module_idempotent() {
@@ -128,9 +126,7 @@ mod tests {
         let manifest = create_test_manifest().unwrap();
         let module_id = manifest.id.to_string();
 
-        let mutation = InstallModule {
-            manifest: manifest.clone(),
-        };
+        let mutation = InstallModule { manifest: manifest.clone() };
 
         // Применяем дважды
         mutation.apply(&mut state);
@@ -140,18 +136,19 @@ mod tests {
         assert_eq!(state.installed_modules.len(), 1);
         assert_eq!(state.installed_modules.get(&module_id).unwrap(), &manifest);
     }
-
 }
 
 #[cfg(test)]
 mod integration_tests {
-    use super::*;
-    use std::path::{Path, PathBuf};
-    use std::fs;
-    use tempfile::TempDir;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use ministate::StateManager;
+    use tempfile::TempDir;
 
+    use super::*;
     use crate::manifest::load_component_manifest_from_toml;
 
     fn create_test_manifest() -> Option<ComponentManifest> {
@@ -171,11 +168,11 @@ mod integration_tests {
         load_component_manifest_from_toml(&toml_path).unwrap()
     }
 
-    async fn new_tmp_state_manager(state_dir: &PathBuf) -> StateManager<ArcellaState, InstallModule> {
-        StateManager::open(state_dir, "counter.wal.jsonl")
-            .await
-            .unwrap()
-    }    
+    async fn new_tmp_state_manager(
+        state_dir: &PathBuf,
+    ) -> StateManager<ArcellaState, InstallModule> {
+        StateManager::open(state_dir, "counter.wal.jsonl").await.unwrap()
+    }
 
     #[tokio::test]
     async fn test_state_recovery_from_wal() {
@@ -188,9 +185,7 @@ mod integration_tests {
         let manifest = create_test_manifest().unwrap();
         let module_id = manifest.id.to_string();
 
-        let install_mutation = InstallModule {
-            manifest: manifest.clone(),
-        };
+        let install_mutation = InstallModule { manifest: manifest.clone() };
 
         manager.apply(install_mutation).await.unwrap();
 
@@ -205,10 +200,6 @@ mod integration_tests {
         let recovered_state = manager2.snapshot().await;
 
         assert!(recovered_state.installed_modules.contains_key(&module_id));
-        assert_eq!(
-            recovered_state.installed_modules.get(&module_id).unwrap(),
-            &manifest
-        );
+        assert_eq!(recovered_state.installed_modules.get(&module_id).unwrap(), &manifest);
     }
-
 }

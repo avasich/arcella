@@ -7,8 +7,9 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 /// A serializable and inspectable representation of a WebAssembly Component Model item.
 ///
@@ -49,7 +50,7 @@ pub enum ComponentItemSpec {
     ///
     /// Contains its own imports and exports, forming a hierarchical structure.
     #[serde(rename = "component")]
-    Component{
+    Component {
         /// Imports declared by the nested component.
         #[serde(default)]
         imports: HashMap<String, ComponentItemSpec>,
@@ -73,8 +74,8 @@ pub enum ComponentItemSpec {
     ///
     /// Represented as a placeholder string in MVP.
     #[serde(rename = "type_def")]
-    Type (String),
-    
+    Type(String),
+
     /// A resource handle (e.g., file descriptor, socket).
     ///
     /// Represented as a placeholder string in MVP.
@@ -85,7 +86,7 @@ pub enum ComponentItemSpec {
     ///
     /// Used to prevent parsing failures when encountering new or malformed items.
     #[serde(rename = "unknown")]
-    Unknown{
+    Unknown {
         /// Optional debug information about the unrecognized item.
         #[serde(skip_serializing_if = "Option::is_none")]
         debug: Option<String>,
@@ -98,19 +99,23 @@ impl std::fmt::Display for ComponentItemSpec {
             Self::ComponentFunc { params, results } => {
                 write!(f, "func(")?;
                 for (i, (name, ty)) in params.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}: {}", name, ty)?;
                 }
                 write!(f, ")")?;
                 if !results.is_empty() {
                     write!(f, " -> ")?;
                     for (i, ty) in results.iter().enumerate() {
-                        if i > 0 { write!(f, ", ")?; }
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
                         write!(f, "{}", ty)?;
                     }
                 }
                 Ok(())
-            }
+            },
             Self::ComponentInstance { .. } => write!(f, "instance"),
             Self::Component { .. } => write!(f, "component"),
             Self::Module(_) => write!(f, "module"),
@@ -165,11 +170,7 @@ fn flatten_component_tree_recursive(
     output: &mut HashMap<String, ComponentItemSpec>,
 ) {
     for (name, item) in tree {
-        let key = if prefix.is_empty() {
-            name.clone()
-        } else {
-            format!("{}.{}", prefix, name)
-        };
+        let key = if prefix.is_empty() { name.clone() } else { format!("{}.{}", prefix, name) };
 
         // Insert the current node
         output.insert(key.clone(), item.clone());
@@ -178,17 +179,17 @@ fn flatten_component_tree_recursive(
         match item {
             ComponentItemSpec::ComponentInstance { exports } => {
                 flatten_component_tree_recursive(exports, &key, output);
-            }
+            },
             ComponentItemSpec::Component { imports: _, exports } => {
                 // For components, we flatten both imports and exports under the same key?
                 // But imports are usually not nested in exports.
                 // For now, flatten only exports (imports are top-level in practice).
                 flatten_component_tree_recursive(exports, &key, output);
                 // Optionally: flatten imports under "key.imports.*" — but likely unnecessary.
-            }
+            },
             _ => {
                 // Leaf node — nothing to recurse into
-            }
+            },
         }
     }
 }

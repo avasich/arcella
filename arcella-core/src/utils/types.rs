@@ -22,7 +22,10 @@ pub const MAX_TOML_DEPTH: usize = 10;
 /// - `Pruned`: Traversal was stopped early because `MAX_TOML_DEPTH` was exceeded.
 ///   This is a non-fatal condition; a warning is issued, but loading continues.
 #[derive(Debug, Clone, PartialEq)]
-pub enum TraversalResult { Full, Pruned }
+pub enum TraversalResult {
+    Full,
+    Pruned,
+}
 
 
 #[derive(Debug, Clone, PartialEq)]

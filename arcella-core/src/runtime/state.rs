@@ -8,15 +8,14 @@
 // except according to those terms.
 
 use std::collections::{HashMap, HashSet};
-use crate::manifest::DeploymentSpec;
 
-use arcella_types::{
-    manifest::ComponentManifest, 
-};
+use arcella_types::manifest::ComponentManifest;
+
+use crate::manifest::DeploymentSpec;
 
 #[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ArcellaState {
-    pub installed_modules: HashMap<String, ComponentManifest>,   // key = "name@version"
-    pub deployments: HashMap<String, DeploymentSpec>,            // key = deployment_id
-    pub running_instances: HashSet<String>,                      // instance_id или deployment_id
+    pub installed_modules: HashMap<String, ComponentManifest>, // key = "name@version"
+    pub deployments: HashMap<String, DeploymentSpec>,          // key = deployment_id
+    pub running_instances: HashSet<String>,                    // instance_id или deployment_id
 }

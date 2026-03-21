@@ -9,9 +9,9 @@
 
 pub mod alme;
 pub mod config;
+pub mod interface_list;
 pub mod manifest;
 pub mod module_id;
-pub mod interface_list;
 pub mod spec;
 
 mod error;
