@@ -21,7 +21,7 @@ use crate::spec::ComponentItemSpec;
 impl FromName for ComponentItemSpec {
     fn from_name(_name: &str) -> Self {
         // Matches original behavior: Unknown { debug: None }
-        ComponentItemSpec::Unknown { debug: None }
+        Self::Unknown { debug: None }
     }
 }
 
@@ -37,6 +37,7 @@ pub struct InterfaceList(NamedMap<ComponentItemSpec>);
 
 impl InterfaceList {
     /// Creates an empty interface list.
+    #[must_use]
     pub fn new() -> Self {
         Self(NamedMap::new())
     }
@@ -52,16 +53,19 @@ impl InterfaceList {
     }
 
     /// Returns `true` if no interfaces are present.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// Consumes and returns the inner map.
+    #[must_use]
     pub fn into_inner(self) -> HashMap<String, ComponentItemSpec> {
         self.0.into_inner()
     }
 
     /// Returns a reference to the inner map.
+    #[must_use]
     pub fn as_inner(&self) -> &HashMap<String, ComponentItemSpec> {
         self.0.as_inner()
     }
@@ -191,8 +195,7 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("expected a string") || err.contains("invalid type"),
-            "Unexpected error message: {}",
-            err
+            "Unexpected error message: {err}"
         );
     }
 
@@ -291,8 +294,7 @@ mod tests {
                     || err.contains("must be an object")
                     || err.contains("expected either a map")
                     || err.contains("sequence of strings"),
-                "unexpected error: {}",
-                err
+                "unexpected error: {err}"
             );
         }
     }

@@ -49,36 +49,45 @@ pub enum ConfigLoadWarning {
 impl std::fmt::Display for ConfigLoadWarning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigLoadWarning::Internal(msg) => {
-                write!(f, "{}", msg)
+            Self::Internal(msg) => {
+                write!(f, "{msg}")
             },
-            ConfigLoadWarning::NullValueDetected { key, file } => {
-                write!(f, "Null value found for key '{}' in file {:?}", key, file)
+            Self::NullValueDetected { key, file } => {
+                write!(f, "Null value found for key '{key}' in file '{}'", file.display())
             },
-            ConfigLoadWarning::ValueError { key, error, file } => {
-                write!(f, "Error processing value for key '{}' in file {:?}: {}", key, file, error)
-            },
-            ConfigLoadWarning::DuplicateInclude { path, included_from } => {
+            Self::ValueError { key, error, file } => {
                 write!(
                     f,
-                    "Duplicate include path '{:?}' found, already included from {:?}",
-                    path, included_from
+                    "Error processing value for key '{key}' in file '{}': {error}",
+                    file.display()
                 )
             },
-            ConfigLoadWarning::RetriedProcessing { path } => {
-                write!(f, "Retried processing of config file {:?}", path)
+            Self::DuplicateInclude { path, included_from } => {
+                write!(
+                    f,
+                    "Duplicate include path '{}' found, already included from '{}'",
+                    path.display(),
+                    included_from.display()
+                )
             },
-            ConfigLoadWarning::SkippedInvalidFile { path } => {
-                write!(f, "Skipped invalid file in includes: {:?}", path)
+            Self::RetriedProcessing { path } => {
+                write!(f, "Retried processing of config file '{}'", path.display())
             },
-            ConfigLoadWarning::UnknownTomlType { key, type_name, file } => {
-                write!(f, "Unknown TOML type '{}' for key '{}' in file {:?}", type_name, key, file)
+            Self::SkippedInvalidFile { path } => {
+                write!(f, "Skipped invalid file in includes: '{}'", path.display())
             },
-            ConfigLoadWarning::MaxDepthReached { path } => {
-                write!(f, "Maximum include depth reached for file {:?}", path)
+            Self::UnknownTomlType { key, type_name, file } => {
+                write!(
+                    f,
+                    "Unknown TOML type '{type_name}' for key '{key}' in file '{}'",
+                    file.display()
+                )
             },
-            ConfigLoadWarning::Pruned { path } => {
-                write!(f, "Pruned file {:?}", path)
+            Self::MaxDepthReached { path } => {
+                write!(f, "Maximum include depth reached for file '{}'", path.display())
+            },
+            Self::Pruned { path } => {
+                write!(f, "Pruned file '{}'", path.display())
             },
         }
     }

@@ -58,7 +58,7 @@ pub async fn start(runtime: Arc<RwLock<ArcellaRuntime>>) -> ArcellaResult<AlmeSe
     };
 
     let socket_path = base_dir.join(socket_path);
-    tracing::info!("Socket path: {:?}", socket_path);
+    tracing::info!("Socket path: '{}'", socket_path.display());
 
-    server::spawn_server(socket_path, runtime).await
+    server::spawn_server(socket_path, runtime)
 }

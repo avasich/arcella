@@ -27,7 +27,6 @@
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
-    sync::OnceLock,
 };
 
 use arcella_types::{manifest::ComponentManifest, module_id::ModuleId};
@@ -382,17 +381,13 @@ pub struct ResourceRequirements {
 
 impl ResourceRequirements {
     pub fn validate(&self) -> ArcellaResult<()> {
-        if let Some(mem) = self.memory_mb {
-            if mem == 0 {
-                return Err(
-                    ArcellaWasmtimeError::Manifest("Memory must be at least 1 MB".into()).into()
-                );
-            }
+        if self.memory_mb == Some(0) {
+            return Err(
+                ArcellaWasmtimeError::Manifest("Memory must be at least 1 MB".into()).into()
+            );
         }
-        if let Some(fuel) = self.fuel {
-            if fuel == 0 {
-                return Err(ArcellaWasmtimeError::Manifest("Fuel must be at least 1".into()).into());
-            }
+        if self.fuel == Some(0) {
+            return Err(ArcellaWasmtimeError::Manifest("Fuel must be at least 1".into()).into());
         }
         Ok(())
     }

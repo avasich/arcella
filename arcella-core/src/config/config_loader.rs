@@ -27,7 +27,7 @@
 //!
 //! ## Path Resolution
 //!
-//! All paths in `includes` are resolved **relative to `ConfigLoadParams::config_dir`**,  
+//! All paths in `includes` are resolved **relative to `ConfigLoadParams::config_dir`**,
 //! *not* relative to the including file. This ensures predictable and reproducible behavior
 //! regardless of the inclusion chain.
 //!
@@ -41,11 +41,18 @@ use std::path::Path;
 
 use arcella_types::config::Value as TomlValue;
 
-use super::{ConfigLoadWarning, toml_files::collect_toml_includes, types::*};
+use super::{
+    ConfigLoadWarning,
+    toml_files::collect_toml_includes,
+    types::{ConfigLoadParams, ConfigLoadState, MAX_CONFIG_DEPTH},
+};
 use crate::{
     ArcellaError,
     ArcellaResult,
-    utils::{toml::parse_and_collect, types::*},
+    utils::{
+        toml::parse_and_collect,
+        types::{TomlFileData, TraversalResult},
+    },
 };
 
 /// Recursively loads configuration files starting from `config_file_path`, including files specified in `includes`.
@@ -87,7 +94,7 @@ pub async fn load_config_recursive(
         state.warnings.push(ConfigLoadWarning::MaxDepthReached {
             path: config_file_path.to_path_buf(),
         });
-        return Ok(vec![]); // Reached maximum depth
+        return Ok(Vec::new()); // Reached maximum depth
     }
 
     // Prevent loading the same file more than once (global deduplication)
@@ -95,10 +102,9 @@ pub async fn load_config_recursive(
         state.warnings.push(ConfigLoadWarning::DuplicateInclude {
             path: config_file_path.to_path_buf(),
             included_from: included_from
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| config_file_path.to_path_buf()),
+                .map_or_else(|| config_file_path.to_path_buf(), Path::to_path_buf),
         });
-        return Ok(vec![]); // Not an error, just break the recursion
+        return Ok(Vec::new()); // Not an error, just break the recursion
     }
 
     // Read file content first; only mark as visited after successful read
@@ -156,7 +162,7 @@ pub async fn load_config_recursive_from_content(
     config_file_path: &Path,
     current_depth: usize,
 ) -> ArcellaResult<Vec<TomlFileData>> {
-    let (config, result) = parse_and_collect(&content, &params.prefix, file_idx)?;
+    let (config, result) = parse_and_collect(content, &params.prefix, file_idx)?;
     if result == TraversalResult::Pruned {
         state.warnings.push(ConfigLoadWarning::Pruned {
             path: config_file_path.to_path_buf(),
@@ -219,7 +225,7 @@ pub async fn load_config_recursive_from_file(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, fs};
+    use std::{collections::HashSet, fmt::Write as _, fs};
 
     use indexmap::IndexSet;
     use tempfile::TempDir;
@@ -238,10 +244,10 @@ mod tests {
 
 
         let main_config_path = config_dir.join("main.toml");
-        let main_config_content = r#"
+        let main_config_content = r"
             [server]
             port = 8080
-        "#;
+        ";
         fs::write(&main_config_path, main_config_content).unwrap();
 
         let params = ConfigLoadParams {
@@ -354,13 +360,12 @@ mod tests {
         // Should load main.toml and cycle.toml once, then detect the cycle and stop.
         // The exact behavior might vary depending on the order of processing in collect_toml_includes,
         // but we expect at least one warning about the duplicate/cycle.
-        assert!(configs.len() >= 1); // At least main.toml is loaded
+        assert!(!configs.is_empty()); // At least main.toml is loaded
         assert!(!state.warnings.is_empty()); // At least one warning for the cycle
         assert!(
             state.warnings.iter().any(|w| matches!(w, ConfigLoadWarning::DuplicateInclude { .. }))
         );
     }
-
     #[tokio::test]
     async fn test_load_config_recursive_depth_limit() {
         let temp_dir = TempDir::new().unwrap();
@@ -374,9 +379,9 @@ mod tests {
         // Create a chain of files that exceeds MAX_CONFIG_DEPTH
         for i in 0..=MAX_CONFIG_DEPTH + 2 {
             // Create more files than the limit
-            let current_file = config_dir.join(format!("level_{}.toml", i));
-            let mut content = format!("key_{} = {}", i, i);
-            content.push_str(&format!("\nincludes = [\"level_{}.toml\"]", i + 1));
+            let current_file = config_dir.join(format!("level_{i}.toml"));
+            let mut content = format!("key_{i} = {i}");
+            let _ = write!(content, "\nincludes = [\"level_{}.toml\"]", i + 1);
             fs::write(&current_file, content).unwrap();
         }
 

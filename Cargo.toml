@@ -45,3 +45,7 @@ uuid = { version = "1.18", features = ["v4", "fast-rng"] }
 wasmtime = "38.0"
 wasmtime-wasi = "38"
 wat = "1.239"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }

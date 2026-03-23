@@ -66,11 +66,13 @@ impl StorageManager {
         Ok(())
     }
 
+    #[must_use]
     pub fn temp_path(&self) -> &Path {
         self.temp_dir.path()
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn new_for_tests(modules_dir: PathBuf, temp_dir: PathBuf) -> Self {
         use std::fs;
         // Создаём временный TempDir вручную из пути (trick для тестов)

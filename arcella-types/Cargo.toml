@@ -22,3 +22,6 @@ ordered-float = { workspace = true }
 
 [dev-dependencies]
 toml = "0.9.8"
+
+[lints]
+workspace = true

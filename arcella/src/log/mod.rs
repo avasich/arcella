@@ -59,7 +59,7 @@ fn get_log_buffer() -> Option<&'static Arc<Mutex<VecDeque<String>>>> {
     LOG_BUFFER.get()
 }
 
-/// Helper: deserialize LevelFilter from string (e.g., "info", "debug")
+/// Helper: deserialize `LevelFilter` from string (e.g., "info", "debug")
 fn deserialize_level_filter<'de, D>(deserializer: D) -> Result<LevelFilter, D::Error>
 where
     D: Deserializer<'de>,
@@ -231,7 +231,7 @@ where
                 },
                 Err(e) => {
                     // Avoid panicking in a tracing handler; silently ignore if poisoned
-                    eprintln!("ALME log buffer poisoned: {}", e);
+                    eprintln!("ALME log buffer poisoned: {e}");
                 },
             }
         }
@@ -251,17 +251,13 @@ where
 ///
 /// A vector of log strings. Returns an empty vector if the buffer is uninitialized or disabled.
 pub fn get_recent_logs(n: usize) -> Vec<String> {
-    if let Some(buffer) = get_log_buffer() {
-        match buffer.lock() {
-            Ok(buf) => buf.iter().rev().take(n).cloned().collect(),
-            Err(e) => {
-                eprintln!("Failed to lock ALME log buffer: {}", e);
-                vec![]
-            },
-        }
-    } else {
-        vec![]
-    }
+    get_log_buffer().map_or_else(Vec::new, |buffer| match buffer.lock() {
+        Ok(buf) => buf.iter().rev().take(n).cloned().collect(),
+        Err(e) => {
+            eprintln!("Failed to lock ALME log buffer: {e}");
+            Vec::new()
+        },
+    })
 }
 
 #[derive(Default)]
@@ -281,7 +277,7 @@ impl tracing::field::Visit for EventVisitor {
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         if field.name() == "message" {
-            self.message = format!("{:?}", value);
+            self.message = format!("{value:?}");
         } else {
             self.fields.push(format!("{}={:?}", field.name(), value));
         }
@@ -304,7 +300,6 @@ impl tracing::field::Visit for EventVisitor {
 ///
 /// A `WorkerGuard` from `tracing_appender`, which must be kept alive until shutdown
 /// to ensure buffered log entries are flushed to disk. Returns `None` if file logging is disabled.
-
 ///
 /// # Errors
 ///
@@ -321,11 +316,11 @@ pub fn init(
     let log_table = extract_subtree(&config.config_values, &(ARCELLA_PREFIX.to_owned() + "log"));
     let tracing_cfg: TracingConfig = toml::Value::Table(log_table)
         .try_into()
-        .map_err(|e| ArcellaError::Config(format!("failed to parse log config: {}", e)))?;
+        .map_err(|e| ArcellaError::Config(format!("failed to parse log config: {e}")))?;
 
     // Ensure log directory exists
     let log_dir = config.base_dir.join(&tracing_cfg.dir);
-    fs::create_dir_all(&log_dir).map_err(|e| ArcellaError::Io(e))?;
+    fs::create_dir_all(&log_dir).map_err(ArcellaError::Io)?;
 
     // Initialize ALME in-memory buffer
     if tracing_cfg.alme_buffer_size > 0 {
@@ -340,13 +335,13 @@ pub fn init(
 
     // Override per-module levels
     for (target, level) in &tracing_cfg.internal {
-        directives.push(format!("{}={}", target, level));
+        directives.push(format!("{target}={level}"));
     }
 
     let filter = directives.join(",");
 
     let env_filter = EnvFilter::try_new(filter)
-        .map_err(|e| ArcellaError::Config(format!("invalid log filter: {}", e)))?;
+        .map_err(|e| ArcellaError::Config(format!("invalid log filter: {e}")))?;
 
     let mut layers = Vec::new();
 
@@ -381,7 +376,7 @@ pub fn init(
 
     subscriber
         .try_init()
-        .map_err(|e| ArcellaError::Internal(format!("failed to init tracing: {}", e)))?;
+        .map_err(|e| ArcellaError::Internal(format!("failed to init tracing: {e}")))?;
 
 
     Ok(file_guard)

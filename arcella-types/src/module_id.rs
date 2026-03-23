@@ -36,16 +36,12 @@ impl ModuleId {
         if !is_valid_simple_version(&version) {
             return Err(ArcellaError::InvalidModuleIdVersion(version));
         }
-        Ok(ModuleId { name, version })
-    }
-
-    /// Returns the string representation: `name@version`.
-    pub fn to_string(&self) -> String {
-        format!("{}@{}", self.name, self.version)
+        Ok(Self { name, version })
     }
 }
 
 impl fmt::Display for ModuleId {
+    /// Returns the string representation: `name@version`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}@{}", self.name, self.version)
     }
@@ -66,7 +62,7 @@ impl FromStr for ModuleId {
             |caps| {
                 let name = caps.name("name").unwrap().as_str().to_string();
                 let version = caps.name("version").unwrap().as_str().to_string();
-                ModuleId::new(name, version)
+                Self::new(name, version)
             },
         )
     }
@@ -89,9 +85,9 @@ impl<'de> Deserialize<'de> for ModuleId {
 
         let helper = ModuleIdHelper::deserialize(deserializer)?;
         match helper {
-            ModuleIdHelper::String(s) => ModuleId::from_str(&s).map_err(serde::de::Error::custom),
+            ModuleIdHelper::String(s) => Self::from_str(&s).map_err(serde::de::Error::custom),
             ModuleIdHelper::Struct { name, version } =>
-                ModuleId::new(name, version).map_err(serde::de::Error::custom),
+                Self::new(name, version).map_err(serde::de::Error::custom),
         }
     }
 }
@@ -99,6 +95,7 @@ impl<'de> Deserialize<'de> for ModuleId {
 /// Validates component/module name.
 ///
 /// Must be non-empty and contain only ASCII letters, digits, underscores, or hyphens.
+#[must_use]
 pub fn is_valid_name(name: &str) -> bool {
     if name.is_empty() || name.len() > 128 {
         return false;
@@ -111,6 +108,7 @@ pub fn is_valid_name(name: &str) -> bool {
 /// - Must have exactly three dot-separated numeric parts.
 /// - Each part must be a non-negative integer.
 /// - No leading zeros (except for "0" itself).
+#[must_use]
 pub fn is_valid_simple_version(version: &str) -> bool {
     let parts: Vec<&str> = version.split('.').collect();
     if parts.len() != 3 {
@@ -147,7 +145,7 @@ mod tests {
         ];
 
         for case in cases {
-            let id = ModuleId::from_str(case).expect(&format!("Failed to parse: {}", case));
+            let id = ModuleId::from_str(case).unwrap_or_else(|_| panic!("Failed to parse: {case}"));
             assert_eq!(id.to_string(), case);
         }
     }
@@ -168,7 +166,7 @@ mod tests {
         ];
 
         for name in invalid_names {
-            assert!(ModuleId::from_str(name).is_err(), "Should fail: {}", name);
+            assert!(ModuleId::from_str(name).is_err(), "Should fail: {name}");
         }
     }
 

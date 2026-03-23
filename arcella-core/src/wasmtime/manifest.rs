@@ -61,7 +61,7 @@ pub fn component_manifest_from_wasm(
         .exports(engine)
         .map(|(name, item)| {
             let spec = item.to_spec(engine).unwrap_or_else(|e| ComponentItemSpec::Unknown {
-                debug: Some(format!("Export '{}': {:?}", name, e)),
+                debug: Some(format!("Export '{name}': {e:?}")),
             });
             (name.into(), spec)
         })
@@ -71,7 +71,7 @@ pub fn component_manifest_from_wasm(
         .imports(engine)
         .map(|(name, item)| {
             let spec = item.to_spec(engine).unwrap_or_else(|e| ComponentItemSpec::Unknown {
-                debug: Some(format!("Import '{}': {:?}", name, e)),
+                debug: Some(format!("Import '{name}': {e:?}")),
             });
             (name.into(), spec)
         })

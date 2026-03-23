@@ -94,6 +94,7 @@ impl WasmFeature {
     /// Returns the canonical Arcella-specific name of the feature.
     ///
     /// Used in configuration, logs, and diagnostics.
+    #[must_use]
     pub const fn arcella_name(&self) -> &'static str {
         match self {
             Self::ComponentModel => "component_model",
@@ -109,6 +110,7 @@ impl WasmFeature {
     }
 
     /// Returns a human-readable description of the feature.
+    #[must_use]
     pub const fn description(&self) -> &'static str {
         match self {
             Self::ComponentModel => "WebAssembly Component Model",
@@ -126,7 +128,8 @@ impl WasmFeature {
     /// Extracts the feature's value from the given configuration.
     ///
     /// Returns `None` if the value is not set (the engine may decide whether to enable the feature).
-    pub fn get_config_value(&self, config: &WasmEngineConfig) -> Option<bool> {
+    #[must_use]
+    pub const fn get_config_value(&self, config: &WasmEngineConfig) -> Option<bool> {
         match self {
             Self::ComponentModel => config.enable_component_model,
             Self::ReferenceTypes => config.enable_reference_types,
@@ -141,6 +144,7 @@ impl WasmFeature {
     }
 
     /// Returns a complete list of all features.
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &[
             Self::ComponentModel,
@@ -197,7 +201,9 @@ pub enum WasmFeatureGroup {
 
 impl WasmFeatureGroup {
     /// Returns the list of features included in the profile.
+    #[must_use]
     pub const fn features(&self) -> &'static [WasmFeature] {
+        #[allow(clippy::enum_glob_use)]
         use WasmFeature::*;
         match self {
             Self::WasiOnly => &[MultiValue, BulkMemory, ReferenceTypes],
@@ -211,6 +217,7 @@ impl WasmFeatureGroup {
     }
 
     /// Returns a description of the profile.
+    #[must_use]
     pub const fn description(&self) -> &'static str {
         match self {
             Self::WasiOnly => "WASI core modules only (no Component Model)",
@@ -302,7 +309,8 @@ impl WasmEngineConfig {
     pub const MIN_REASONABLE_PAGES: u32 = 1;
 
     /// Explicitly enables or disables threading support.
-    pub fn enable_threads(mut self, value: bool) -> Self {
+    #[must_use]
+    pub const fn enable_threads(mut self, value: bool) -> Self {
         self.enable_threads = Some(value);
         self
     }
@@ -312,6 +320,7 @@ impl WasmEngineConfig {
     ///
     /// This allows you to set a profile first and then override
     /// specific features using the builder chain.
+    #[must_use]
     pub fn with_profile(mut self, profile: WasmFeatureGroup) -> Self {
         self.profile = Some(profile);
 
@@ -355,7 +364,7 @@ impl WasmEngineConfig {
     ///
     /// Currently, only memory size limits are checked.
     /// Compatibility with a specific engine is checked separately via `compatibility_report`.
-    pub fn validate(&self) -> Result<(), ArcellaError> {
+    pub const fn validate(&self) -> Result<(), ArcellaError> {
         if let Some(pages) = self.max_memory_pages {
             if pages < Self::MIN_REASONABLE_PAGES {
                 return Err(ArcellaError::MemoryTooSmall(pages));
@@ -415,6 +424,7 @@ impl WasmEngineCompatibilityReport {
     ///
     /// This is important because without Component Model, working with WIT interfaces is impossible,
     /// and installing a component that depends on them would fail.
+    #[must_use]
     pub fn has_critical_gaps(&self) -> bool {
         self.features
             .iter()
@@ -425,6 +435,7 @@ impl WasmEngineCompatibilityReport {
     ///
     /// Arcella always strives to operate in the most capable mode possible,
     /// so this method always returns `true`.
+    #[must_use]
     pub fn is_runnable(&self) -> bool {
         true
     }
@@ -448,8 +459,10 @@ pub trait WasmEngineCapabilities {
     /// This method **never panics**: even if unsupported features are requested,
     /// it returns a report with warnings.
     fn compatibility_report(&self, config: &WasmEngineConfig) -> WasmEngineCompatibilityReport {
-        let mut report = WasmEngineCompatibilityReport::default();
-        report.profile = config.profile;
+        let mut report = WasmEngineCompatibilityReport {
+            profile: config.profile,
+            ..Default::default()
+        };
 
         let known_features = self.supported_features();
 
@@ -460,10 +473,9 @@ pub trait WasmEngineCapabilities {
             if let Some(feat) = known_features.iter().find(|f| f.arcella_name == arcella_name) {
                 if requested && !feat.supported {
                     report.warnings.push(format!(
-                        "requested feature '{}' ({}) is not supported{}",
-                        arcella_name,
+                        "requested feature '{arcella_name}' ({}) is not supported{}",
                         feat.engine_specific_name,
-                        feat.notes.as_ref().map_or(String::new(), |n| format!(": {}", n))
+                        feat.notes.as_ref().map_or(String::new(), |n| format!(": {n}"))
                     ));
                 }
                 report.features.push(SupportedFeature {
@@ -476,8 +488,7 @@ pub trait WasmEngineCapabilities {
             } else {
                 // The feature is not supported by the engine at all
                 report.warnings.push(format!(
-                    "requested feature '{}' is not recognized by engine",
-                    arcella_name
+                    "requested feature '{arcella_name}' is not recognized by engine"
                 ));
                 report.features.push(SupportedFeature {
                     arcella_name,
@@ -660,6 +671,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_memory_validation() {
         let mut config = WasmEngineConfig::default();
         config.max_memory_pages = Some(0);

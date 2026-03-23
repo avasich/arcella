@@ -99,12 +99,12 @@ fn handle_ping() -> AlmeResponse {
 /// Returns an error response if the runtime status cannot be retrieved
 /// (e.g., due to a poisoned lock).
 async fn handle_status(runtime: &Arc<RwLock<ArcellaRuntime>>) -> AlmeResponse {
-    let runtime_guard = runtime.read().await;
+    let runtime_status = runtime.read().await.status();
 
-    let runtime_status = match runtime_guard.status() {
+    let runtime_status = match runtime_status {
         Ok(status) => status,
         Err(e) => {
-            tracing::error!("{}", e);
+            tracing::error!("{e}");
             return AlmeResponse::error(&e.to_string());
         },
     };
@@ -135,7 +135,7 @@ async fn handle_status(runtime: &Arc<RwLock<ArcellaRuntime>>) -> AlmeResponse {
 /// # Arguments
 ///
 /// * `args` — Expected to contain an optional `"n"` field (unsigned integer)
-///            specifying the number of log lines to return. Defaults to 100.
+///   specifying the number of log lines to return. Defaults to 100.
 ///
 /// # Returns
 ///
@@ -177,7 +177,7 @@ async fn handle_module_list(_runtime: &Arc<RwLock<ArcellaRuntime>>) -> AlmeRespo
 
 async fn handle_module_install(runtime: &Arc<RwLock<ArcellaRuntime>>, path: &str) -> AlmeResponse {
     // 1. Briefly acquire a read lock to get Arc references
-    let ctx = match ArcellaExecutionContext::from_runtime(&runtime).await {
+    let ctx = match ArcellaExecutionContext::from_runtime(runtime).await {
         Ok(ctx) => ctx,
         Err(e) => {
             tracing::error!("Failed to create execution context: {}", e);
@@ -197,14 +197,14 @@ async fn handle_module_install(runtime: &Arc<RwLock<ArcellaRuntime>>, path: &str
         "module_id": module_id
     });
 
-    let msg = format!("Module {} is installed", module_id);
+    let msg = format!("Module {module_id} is installed");
     tracing::debug!(msg);
     AlmeResponse::success(&msg, Some(data))
 }
 
 async fn handle_module_deploy(runtime: &Arc<RwLock<ArcellaRuntime>>, path: &str) -> AlmeResponse {
     // 1. Briefly acquire a read lock to get Arc references
-    let ctx = match ArcellaExecutionContext::from_runtime(&runtime).await {
+    let ctx = match ArcellaExecutionContext::from_runtime(runtime).await {
         Ok(ctx) => ctx,
         Err(e) => {
             tracing::error!("Failed to create execution context: {}", e);
@@ -226,7 +226,7 @@ async fn handle_module_deploy(runtime: &Arc<RwLock<ArcellaRuntime>>, path: &str)
         "deployment_id": deployment_id
     });
 
-    let msg = format!("Module {} is deployed as {}", module_id, deployment_id);
+    let msg = format!("Module {module_id} is deployed as {deployment_id}");
     tracing::debug!(msg);
     AlmeResponse::success(&msg, Some(data))
 }
@@ -235,12 +235,12 @@ async fn handle_module_start(
     runtime: &Arc<RwLock<ArcellaRuntime>>,
     deployment_id: &str,
 ) -> AlmeResponse {
-    let mut runtime_guard = runtime.write().await;
+    let module_status = runtime.write().await.module_start(deployment_id).await;
 
-    let module_status = match runtime_guard.module_start(deployment_id).await {
+    let module_status = match module_status {
         Ok(status) => status,
         Err(e) => {
-            tracing::error!("{}", e);
+            tracing::error!("{e}");
             return AlmeResponse::error(&e.to_string());
         },
     };
@@ -250,7 +250,7 @@ async fn handle_module_start(
         "status": module_status,
     });
 
-    let msg = format!("Module {} is started", deployment_id);
+    let msg = format!("Module {deployment_id} is started");
     tracing::debug!(msg);
     AlmeResponse::success(&msg, Some(data))
 }
@@ -259,12 +259,12 @@ async fn handle_module_stop(
     runtime: &Arc<RwLock<ArcellaRuntime>>,
     deployment_id: &str,
 ) -> AlmeResponse {
-    let mut runtime_guard = runtime.write().await;
+    let module_status = runtime.write().await.module_stop(deployment_id).await;
 
-    let module_status = match runtime_guard.module_stop(deployment_id).await {
+    let module_status = match module_status {
         Ok(status) => status,
         Err(e) => {
-            tracing::error!("{}", e);
+            tracing::error!("{e}");
             return AlmeResponse::error(&e.to_string());
         },
     };
@@ -274,7 +274,7 @@ async fn handle_module_stop(
         "status": module_status,
     });
 
-    let msg = format!("Module {} is stopped", deployment_id);
+    let msg = format!("Module {deployment_id} is stopped");
     tracing::debug!(msg);
     AlmeResponse::success(&msg, Some(data))
 }

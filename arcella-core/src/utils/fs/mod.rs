@@ -43,25 +43,24 @@ use super::error::{ArcellaUtilsError, ArcellaUtilsResult};
 /// A `Result` containing the determined `PathBuf` or an error if the home directory
 /// cannot be determined.
 pub async fn find_base_dir() -> ArcellaUtilsResult<PathBuf> {
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(parent) = current_exe.parent() {
-            // Case 1: executable is in a `bin` directory
-            if parent.file_name() == Some(std::ffi::OsStr::new("bin")) {
-                if let Some(grandparent) = parent.parent() {
-                    // Avoid using root directory (e.g., /bin → /) as base dir
-                    if grandparent.parent().is_some() {
-                        return Ok(grandparent.to_path_buf());
-                    }
-                }
-            }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(parent) = current_exe.parent()
+    {
+        // Case 1: executable is in a `bin` directory
+        // Avoid using root directory (e.g., /bin → /) as base dir
+        if parent.file_name() == Some(std::ffi::OsStr::new("bin"))
+            && let Some(grandparent) = parent.parent()
+            && grandparent.parent().is_some()
+        {
+            return Ok(grandparent.to_path_buf());
+        }
 
-            // Case 2: check if current_exe's parent has a `config` dir
-            let local_config = parent.join("config");
-            if let Ok(metadata) = fs::metadata(&local_config).await {
-                if metadata.is_dir() {
-                    return Ok(parent.to_path_buf());
-                }
-            }
+        // Case 2: check if current_exe's parent has a `config` dir
+        let local_config = parent.join("config");
+        if let Ok(metadata) = fs::metadata(&local_config).await
+            && metadata.is_dir()
+        {
+            return Ok(parent.to_path_buf());
         }
     }
 
@@ -97,16 +96,17 @@ pub async fn create_temp_subdir(
 ) -> ArcellaUtilsResult<PathBuf> {
     let uuid_part = Uuid::new_v4();
 
-    let temp_name = if let Some(p) = prefix {
-        // Sanitize prefix to filesystem-safe characters
-        let clean_prefix = p
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-            .collect::<String>();
-        format!("{}.tmp-{}", clean_prefix, uuid_part.simple())
-    } else {
-        format!("tmp-{}", uuid_part.simple())
-    };
+    let temp_name = prefix.map_or_else(
+        || format!("tmp-{}", uuid_part.simple()),
+        |p| {
+            // Sanitize prefix to filesystem-safe characters
+            let clean_prefix = p
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+                .collect::<String>();
+            format!("{}.tmp-{}", clean_prefix, uuid_part.simple())
+        },
+    );
 
     let temp_path = parent_dir.join(temp_name);
 
@@ -151,7 +151,7 @@ pub async fn copy_files_to_dir(
     // Validate target directory upfront
     if !target_dir.is_dir() {
         return Err(ArcellaUtilsError::InvalidArgument {
-            message: format!("Target is not a directory: {:?}", target_dir),
+            message: format!("Target is not a directory: '{}'", target_dir.display()),
         });
     }
 
@@ -163,7 +163,7 @@ pub async fn copy_files_to_dir(
             async move {
                 let file_name =
                     src_path.file_name().ok_or_else(|| ArcellaUtilsError::InvalidArgument {
-                        message: format!("File has no name: {:?}", src_path),
+                        message: format!("File has no name: '{}'", src_path.display()),
                     })?;
 
                 let dest_path = target_dir.join(file_name);
@@ -231,31 +231,6 @@ pub async fn sync_directory(dir: &Path) -> ArcellaUtilsResult<()> {
     Ok(())
 }
 
-/// Atomically renames `src` to `dst` using `std::fs::rename`.
-///
-/// This operation is:
-/// - **Atomic** on POSIX-compliant filesystems (ext4, XFS, APFS, etc.).
-/// - **Safe** to use after all file data and directory entries in `src` are synchronized.
-///
-/// # Errors
-///
-/// Returns `ArcellaUtilsError::IoWithPath` if the rename fails (e.g., cross-device,
-/// permission denied, `dst` already exists on Windows, etc.).
-pub async fn atomic_rename(src: PathBuf, dst: PathBuf) -> Result<(), ArcellaUtilsError> {
-    let src_for_error = src.clone();
-
-    tokio::task::spawn_blocking(move || std::fs::rename(&src, &dst))
-        .await
-        .map_err(|e| ArcellaUtilsError::IoWithPath {
-            source: std::io::Error::other(format!("Spawn blocking for rename failed: {}", e)),
-            path: src_for_error.clone(),
-        })?
-        .map_err(|e| ArcellaUtilsError::IoWithPath {
-            source: e,
-            path: src_for_error.clone(),
-        })
-}
-
 
 /// Maximum allowed length for base names (e.g., module name, deployment ID).
 /// Chosen to prevent filesystem path overflow and ensure readability.
@@ -281,15 +256,15 @@ pub fn base_name_from_file_with_ext<P: AsRef<Path>>(
         }
     })?;
 
-    let expected_suffix = format!(".{}", ext);
+    let expected_suffix = format!(".{ext}");
     if !file_name.ends_with(&expected_suffix) {
         return Err(ArcellaUtilsError::InvalidArgument {
-            message: format!("File '{}' does not have extension '{}'", file_name, ext),
+            message: format!("File '{file_name}' does not have extension '{ext}'"),
         });
     }
     if file_name.len() <= expected_suffix.len() {
         return Err(ArcellaUtilsError::InvalidArgument {
-            message: format!("Filename '{}' is too short to have extension '{}'", file_name, ext),
+            message: format!("Filename '{file_name}' is too short to have extension '{ext}'"),
         });
     }
 
@@ -329,30 +304,19 @@ pub fn validate_base_name(name: &str) -> ArcellaUtilsResult<()> {
     Ok(())
 }
 
-/// Constructs a sibling file path by appending a suffix to the file stem.
-///
-/// Examples:
-/// - `"app.wasm"` + `".component.toml"` → `"app.component.toml"`
-/// - `".env.wasm"` + `".toml"` → `".env.toml"`
-///
-/// If the input has no stem (e.g., `/` or `.`), the result is undefined
-/// and should not be relied upon. In practice, callers ensure valid paths.
-pub fn sibling_path_with_suffix<P: AsRef<Path>>(original: P, suffix: &str) -> PathBuf {
-    let original = original.as_ref();
-    let stem = original.file_stem().unwrap_or(original.file_name().unwrap_or_default());
-    original.with_file_name(format!("{}{}", stem.to_string_lossy(), suffix))
-}
-
-/// Constructs the expected suffix path for a given base name.
-///
-/// Example: `"web"` → `"web.deployment.toml"`
-pub fn file_path_from_base_and_extension<P: AsRef<Path>>(
-    base_dir: P,
-    base_name: &str,
-    suffix: &str,
-) -> PathBuf {
-    base_dir.as_ref().join(format!("{}.{}", base_name, suffix))
-}
+// /// Constructs a sibling file path by appending a suffix to the file stem.
+// ///
+// /// Examples:
+// /// - `"app.wasm"` + `".component.toml"` → `"app.component.toml"`
+// /// - `".env.wasm"` + `".toml"` → `".env.toml"`
+// ///
+// /// If the input has no stem (e.g., `/` or `.`), the result is undefined
+// /// and should not be relied upon. In practice, callers ensure valid paths.
+// pub fn sibling_path_with_suffix<P: AsRef<Path>>(original: P, suffix: &str) -> PathBuf {
+//     let original = original.as_ref();
+//     let stem = original.file_stem().or_else(|| original.file_name()).unwrap_or_default();
+//     original.with_file_name(format!("{}{}", stem.to_string_lossy(), suffix))
+// }
 
 #[cfg(test)]
 mod tests {
@@ -377,12 +341,5 @@ mod tests {
         assert!(validate_base_name("").is_err());
         assert!(validate_base_name("invalid name!").is_err());
         assert!(validate_base_name(&"x".repeat(129)).is_err());
-    }
-
-    #[test]
-    fn test_sibling_path_with_suffix() {
-        let path = Path::new("/a/b/app.wasm");
-        let toml = sibling_path_with_suffix(path, ".component.toml");
-        assert_eq!(toml, Path::new("/a/b/app.component.toml"));
     }
 }

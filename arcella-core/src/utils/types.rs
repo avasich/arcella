@@ -21,7 +21,7 @@ pub const MAX_TOML_DEPTH: usize = 10;
 /// - `Full`: The entire subtree was processed without hitting depth limits.
 /// - `Pruned`: Traversal was stopped early because `MAX_TOML_DEPTH` was exceeded.
 ///   This is a non-fatal condition; a warning is issued, but loading continues.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TraversalResult {
     Full,
     Pruned,

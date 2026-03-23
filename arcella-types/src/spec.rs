@@ -7,7 +7,7 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasher};
 
 use serde::{Deserialize, Serialize};
 
@@ -53,11 +53,11 @@ pub enum ComponentItemSpec {
     Component {
         /// Imports declared by the nested component.
         #[serde(default)]
-        imports: HashMap<String, ComponentItemSpec>,
+        imports: HashMap<String, Self>,
 
         /// Exports provided by the nested component.
         #[serde(default)]
-        exports: HashMap<String, ComponentItemSpec>,
+        exports: HashMap<String, Self>,
     },
 
     /// An instantiated component (e.g., a resolved instance like `wasi:cli/stdio`).
@@ -67,7 +67,7 @@ pub enum ComponentItemSpec {
     ComponentInstance {
         /// The exported items of this instance.
         #[serde(default)]
-        exports: HashMap<String, ComponentItemSpec>,
+        exports: HashMap<String, Self>,
     },
 
     /// A user-defined type (record, variant, enum, flags, etc.).
@@ -98,20 +98,18 @@ impl std::fmt::Display for ComponentItemSpec {
         match self {
             Self::ComponentFunc { params, results } => {
                 write!(f, "func(")?;
-                for (i, (name, ty)) in params.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if let Some(((name, ty), rest)) = params.split_first() {
+                    write!(f, "{name}: {ty}")?;
+                    for (name, ty) in rest {
+                        write!(f, ", {name}, {ty}")?;
                     }
-                    write!(f, "{}: {}", name, ty)?;
                 }
                 write!(f, ")")?;
-                if !results.is_empty() {
-                    write!(f, " -> ")?;
-                    for (i, ty) in results.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{}", ty)?;
+
+                if let Some((ty, rest)) = results.split_first() {
+                    write!(f, " -> {ty}")?;
+                    for ty in rest {
+                        write!(f, ", {ty}")?;
                     }
                 }
                 Ok(())
@@ -120,9 +118,9 @@ impl std::fmt::Display for ComponentItemSpec {
             Self::Component { .. } => write!(f, "component"),
             Self::Module(_) => write!(f, "module"),
             Self::CoreFunc(_) => write!(f, "core-func"),
-            Self::Type(t) => write!(f, "type({})", t),
-            Self::Resource(r) => write!(f, "resource({})", r),
-            Self::Unknown { debug: Some(d) } => write!(f, "unknown({})", d),
+            Self::Type(t) => write!(f, "type({t})"),
+            Self::Resource(r) => write!(f, "resource({r})"),
+            Self::Unknown { debug: Some(d) } => write!(f, "unknown({d})"),
             Self::Unknown { debug: None } => write!(f, "unknown"),
         }
     }
@@ -153,8 +151,9 @@ impl std::fmt::Display for ComponentItemSpec {
 ///   "logger.log": ComponentFunc(...)
 /// }
 /// ```
-pub fn flatten_component_tree(
-    tree: &HashMap<String, ComponentItemSpec>,
+#[must_use]
+pub fn flatten_component_tree<S: BuildHasher>(
+    tree: &HashMap<String, ComponentItemSpec, S>,
 ) -> HashMap<String, ComponentItemSpec> {
     let mut flat = HashMap::new();
     flatten_component_tree_recursive(tree, "", &mut flat);
@@ -164,13 +163,13 @@ pub fn flatten_component_tree(
 /// Recursive helper for `flatten_component_tree`.
 ///
 /// Internal use only.
-fn flatten_component_tree_recursive(
-    tree: &HashMap<String, ComponentItemSpec>,
+fn flatten_component_tree_recursive<S: BuildHasher>(
+    tree: &HashMap<String, ComponentItemSpec, S>,
     prefix: &str,
     output: &mut HashMap<String, ComponentItemSpec>,
 ) {
     for (name, item) in tree {
-        let key = if prefix.is_empty() { name.clone() } else { format!("{}.{}", prefix, name) };
+        let key = if prefix.is_empty() { name.clone() } else { format!("{prefix}.{name}") };
 
         // Insert the current node
         output.insert(key.clone(), item.clone());

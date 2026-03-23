@@ -28,8 +28,8 @@ pub enum ArcellaMutation {
 impl Mutator<ArcellaState> for ArcellaMutation {
     fn apply(&self, state: &mut ArcellaState) {
         match self {
-            ArcellaMutation::InstallModule(m) => m.apply(state),
-            ArcellaMutation::DeployModule(m) => m.apply(state),
+            Self::InstallModule(m) => m.apply(state),
+            Self::DeployModule(m) => m.apply(state),
             //ArcellaMutation::StartDeployment(m) => m.apply(state),
             //ArcellaMutation::StopDeployment(m) => m.apply(state),
         }
@@ -83,7 +83,7 @@ mod tests {
 
             // 1. Создаём мутацию
             let manifest = create_test_manifest().unwrap();
-            let mutation = InstallModule { manifest: manifest.clone() };
+            let mutation = InstallModule { manifest };
 
             // 2. Сериализуем в JSONL (одна запись — одна строка)
             let json_line = serde_json::to_string(&mutation).unwrap();
@@ -140,10 +140,7 @@ mod tests {
 
 #[cfg(test)]
 mod integration_tests {
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-    };
+    use std::{fs, path::PathBuf};
 
     use ministate::StateManager;
     use tempfile::TempDir;
@@ -180,7 +177,7 @@ mod integration_tests {
         let state_dir = temp_dir.path().to_path_buf();
 
         // === Шаг 1: Открываем менеджер и устанавливаем модуль ===
-        let mut manager = new_tmp_state_manager(&state_dir).await;
+        let manager = new_tmp_state_manager(&state_dir).await;
 
         let manifest = create_test_manifest().unwrap();
         let module_id = manifest.id.to_string();

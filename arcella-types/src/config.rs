@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// This struct is used inside the [`Value::TypedError`] variant to carry
 /// structured error information instead of just a string.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypedError {
     /// Human-readable error message.
     pub message: String,
@@ -78,7 +78,7 @@ pub struct TypedError {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     /// A sequence of `Value`s.
-    Array(Vec<Value>),
+    Array(Vec<Self>),
 
     /// A UTF-8 string.
     String(String),
@@ -95,7 +95,7 @@ pub enum Value {
 
     /// A map of string keys to `Value`s.
     /// Uses `HashMap` for fast lookups.
-    Map(HashMap<String, Value>),
+    Map(HashMap<String, Self>),
 
     /// An explicit null value, representing the absence of data.
     Null,
@@ -108,7 +108,7 @@ pub type ConfigValues = IndexMap<String, (Value, usize)>;
 
 /// Represents an entry within a section of the configuration.
 /// It can be either a reference to a value key or a name of a subsection.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SectionEntry {
     /// A reference to a value key by its index in the `values` map.
     ValueKey(usize),
@@ -147,6 +147,7 @@ impl ConfigData {
     /// # Returns
     ///
     /// A new `ConfigData` instance with organized sections.
+    #[must_use]
     pub fn new(values: IndexMap<String, Value>) -> Self {
         let mut sorted_values = values;
         sorted_values.sort_keys();
@@ -181,7 +182,7 @@ impl ConfigData {
 
         sections.sort_keys();
 
-        ConfigData {
+        Self {
             values: sorted_values,
             sections,
         }
@@ -210,6 +211,7 @@ impl ConfigData {
     /// assert_eq!(config.get("key1"), Some(&Value::Integer(42)));
     /// assert_eq!(config.get("nonexistent"), None);
     /// ```
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.values.get(key)
     }
@@ -223,6 +225,7 @@ impl ConfigData {
     /// # Returns
     ///
     /// `Some(Vec<usize>)` containing the indices if the section exists, otherwise `None`.
+    #[must_use]
     pub fn get_section_keys(&self, section: &str) -> Option<Vec<usize>> {
         self.sections.get(section).map(|entries| {
             entries
@@ -244,6 +247,7 @@ impl ConfigData {
     /// # Returns
     ///
     /// `Some(Vec<String>)` containing the names of sub-sections if the section exists, otherwise `None`.
+    #[must_use]
     pub fn get_subsection_names(&self, section: &str) -> Option<Vec<String>> {
         self.sections.get(section).map(|entries| {
             entries
@@ -287,6 +291,7 @@ impl ConfigData {
     /// assert_eq!(log_section.get("arcella.log.level"), Some(&&Value::String("info".to_string())));
     /// assert_eq!(log_section.get("arcella.log.file"), Some(&&Value::String("log.txt".to_string())));
     /// ```
+    #[must_use]
     pub fn get_section_data(&self, section: &str) -> Option<IndexMap<String, &Value>> {
         let indices = self.get_section_keys(section)?;
         let mut section_data = IndexMap::new();

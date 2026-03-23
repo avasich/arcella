@@ -54,7 +54,7 @@ static MAX_READER_TIMEOUT: u64 = 60; // seconds
 /// On startup, any existing file at `socket_path` is removed to handle stale sockets.
 /// The socket file is created with permissions `0o600` (read/write for owner only) for security.
 ///
-/// A graceful shutdown can be initiated by calling [crate::alme::AlmeServerHandle::shutdown],
+/// A graceful shutdown can be initiated by calling [`crate::alme::AlmeServerHandle::shutdown`],
 /// which signals the server to stop accepting new connections, notifies all active connection
 /// handlers to terminate, and removes the Unix socket file once the server loop exits.
 ///  
@@ -72,14 +72,14 @@ static MAX_READER_TIMEOUT: u64 = 60; // seconds
 /// Returns an error if:
 /// - The socket cannot be bound (e.g., due to permission issues).
 /// - The socket file permissions cannot be set
-pub async fn spawn_server(
+pub fn spawn_server(
     socket_path: PathBuf,
     runtime: Arc<RwLock<ArcellaRuntime>>,
 ) -> ArcellaResult<super::AlmeServerHandle> {
-    if socket_path.exists() {
-        if let Err(e) = fs::remove_file(&socket_path) {
-            tracing::error!("Failed to remove stale socket {:?}: {}", socket_path, e);
-        }
+    if socket_path.exists()
+        && let Err(e) = fs::remove_file(&socket_path)
+    {
+        tracing::error!("Failed to remove stale socket '{}': {e}", socket_path.display());
     }
 
     let listener = UnixListener::bind(&socket_path)?;
@@ -89,15 +89,11 @@ pub async fn spawn_server(
 
     let (shutdown_tx, shutdown_rx) = broadcast::channel::<()>(1);
 
-    let socket_path_clone = socket_path.clone();
-    let runtime_clone = runtime.clone();
     let join_handle = tokio::spawn(async move {
-        let result = run_server_loop(listener, runtime_clone, shutdown_rx).await;
-
-        // Remove socket on shutdown
-        if let Err(e) = fs::remove_file(&socket_path_clone) {
-            tracing::error!("Failed to remove ALME socket {:?}: {}", socket_path_clone, e);
-        }
+        let result = run_server_loop(listener, runtime, shutdown_rx).await;
+        let _ = tokio::fs::remove_file(&socket_path).await.inspect_err(|e| {
+            tracing::error!("Failed to remove ALME socket '{}': {e}", socket_path.display());
+        });
 
         result
     });
@@ -190,7 +186,8 @@ async fn handle_connection(
     let mut reader = BufReader::new(reader);
     let mut buffer = String::new();
 
-    let result = loop {
+
+    loop {
         buffer.clear();
 
         let line = tokio::select! {
@@ -202,13 +199,13 @@ async fn handle_connection(
                     },
                     Ok(Ok(n)) => {
                         if n > MAX_REQUEST_LENGTH {
-                            let message = format!("Request too large");
+                            let message = "Request too large".to_string();
                             let resp = AlmeResponse::error(&message);
                             tracing::warn!("{}", message);
                             send_response(&mut writer, &resp).await?;
                             continue;
                         }
-                        let trimmed = buffer.trim_end_matches(&['\r', '\n']).trim();
+                        let trimmed = buffer.trim_end_matches(['\r', '\n']).trim();
                         if trimmed.is_empty() {
                             continue;
                         }
@@ -237,7 +234,7 @@ async fn handle_connection(
         let request: AlmeRequest = match serde_json::from_str(&line) {
             Ok(req) => req,
             Err(e) => {
-                let message = format!("Invalid JSON: {} ", e);
+                let message = format!("Invalid JSON: {e} ");
                 let resp = AlmeResponse::error(&message);
                 tracing::error!("{}", message);
                 send_response(&mut writer, &resp).await?;
@@ -249,9 +246,7 @@ async fn handle_connection(
         let response = super::commands::dispatch_command(&request, &runtime).await;
 
         send_response(&mut writer, &response).await?;
-    };
-
-    result
+    }
 }
 
 /// Serializes an [`AlmeResponse`] to JSON and writes it to the client stream.
@@ -269,7 +264,7 @@ async fn send_response(
     response: &AlmeResponse,
 ) -> ArcellaResult<()> {
     tracing::trace!("Send response");
-    let mut json = serde_json::to_vec(response).map_err(|e| ArcellaError::Json(e))?;
+    let mut json = serde_json::to_vec(response).map_err(ArcellaError::Json)?;
     json.push(b'\n');
     let _ = stream.write_all(&json).await.map_err(|e| {
         tracing::error!("Failed to send response: {}", e);

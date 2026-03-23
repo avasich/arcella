@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use arcella_types::alme::{AlmeCommand, AlmeRequest, AlmeResponse};
 use clap::{Parser, Subcommand};
+use serde_json::Value;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
@@ -89,7 +90,7 @@ async fn send_alme_request(
             );
         },
         Err(e) => {
-            anyhow::bail!("Failed to connect to ALME server: {}", e);
+            anyhow::bail!("Failed to connect to ALME server: {e}");
         },
     };
     let (reader, mut writer) = tokio::io::split(stream);
@@ -127,14 +128,14 @@ where
     let req = build_request();
     let resp = send_alme_request(socket_path, req).await?;
     if resp.success {
-        if success_msg != "" {
-            println!("{}", success_msg);
+        if !success_msg.is_empty() {
+            println!("{success_msg}");
         }
-        if resp.message != "" {
+        if !resp.message.is_empty() {
             println!("{}", resp.message);
         }
         if let Some(data) = resp.data {
-            println!("Details: {:#}", data);
+            println!("Details: {data:#}");
         }
     } else {
         eprintln!("Error: {}", resp.message);
@@ -157,13 +158,12 @@ async fn handle_command(cmd: Commands) -> anyhow::Result<()> {
             };
             let resp = send_alme_request(&socket_path, req).await?;
             if resp.success {
-                if let Some(data) = resp.data {
-                    if let Some(lines) = data.get("lines").and_then(|v| v.as_array()) {
-                        for line in lines {
-                            if let Some(s) = line.as_str() {
-                                println!("{}", s);
-                            }
-                        }
+                let lines =
+                    resp.data.as_ref().and_then(|data| data.get("lines")).and_then(Value::as_array);
+
+                if let Some(lines) = lines {
+                    for line in lines {
+                        println!("{line}");
                     }
                 }
             } else {

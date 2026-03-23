@@ -39,7 +39,7 @@ pub enum ArcellaUtilsError {
 
     /// TOML error
     #[error("TOML error: {0}")]
-    TOML(String),
+    Toml(String),
 }
 
 impl ArcellaUtilsError {

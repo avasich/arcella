@@ -26,7 +26,7 @@ type InstallLocks = Mutex<std::collections::HashMap<ModuleId, Arc<Mutex<()>>>>;
 
 /// Execution context capturing all shared dependencies needed to perform
 /// lifecycle operations (install, deploy, start, stop, etc.) without
-/// holding a reference to the main ArcellaRuntime.
+/// holding a reference to the main `ArcellaRuntime`.
 #[derive(Clone)]
 pub struct ArcellaExecutionContext {
     pub config: Arc<ArcellaConfig>,
@@ -41,7 +41,7 @@ impl ArcellaExecutionContext {
     pub async fn from_runtime(runtime: &Arc<RwLock<super::ArcellaRuntime>>) -> ArcellaResult<Self> {
         let runtime_guard = runtime.read().await;
 
-        Ok(ArcellaExecutionContext {
+        Ok(Self {
             config: runtime_guard.config.clone(),
             storage: runtime_guard.storage.clone(),
             cache: runtime_guard.cache.clone(),

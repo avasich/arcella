@@ -37,11 +37,9 @@ use crate::{
     runtime::state::ArcellaState,
     storage::StorageManager,
     utils::fs::{
-        atomic_rename,
         base_name_from_file_with_ext,
         copy_files_to_dir,
         create_temp_subdir,
-        sibling_path_with_suffix,
         sync_directory,
     },
 };
@@ -122,12 +120,12 @@ impl InstallPackage {
     ///
     /// Returns `ArcellaError::InvalidArgument` if any expected file is missing
     /// in the staging directory.
-    pub fn from_staging_dir(&self, staging_dir: PathBuf) -> ArcellaResult<Self> {
+    pub fn with_staging_dir(&self, staging_dir: PathBuf) -> ArcellaResult<Self> {
         let staged_wasm = staging_dir.join(self.wasm_path.file_name().ok_or_else(|| {
             let e = ArcellaError::InvalidArgument {
                 message: "WASM file has no name".into(),
             };
-            tracing::error!("{}", e);
+            tracing::error!("{e}");
             e
         })?);
 
@@ -144,31 +142,31 @@ impl InstallPackage {
         // Verify all expected files exist in staging
         if !staged_wasm.exists() {
             let e = ArcellaError::InvalidArgument {
-                message: format!("Staged WASM file not found: {:?}", staged_wasm),
+                message: format!("Staged WASM file not found: '{}'", staged_wasm.display()),
             };
-            tracing::error!("{}", e);
+            tracing::error!("{e}");
             return Err(e);
         }
-        if let Some(ref p) = staged_component_toml {
-            if !p.exists() {
-                let e = ArcellaError::InvalidArgument {
-                    message: format!("Staged component TOML not found: {:?}", p),
-                };
-                tracing::error!("{}", e);
-                return Err(e);
-            }
+        if let Some(ref p) = staged_component_toml
+            && !p.exists()
+        {
+            let e = ArcellaError::InvalidArgument {
+                message: format!("Staged component TOML not found: '{}'", p.display()),
+            };
+            tracing::error!("{e}");
+            return Err(e);
         }
-        if let Some(ref p) = staged_deployment_template {
-            if !p.exists() {
-                let e = ArcellaError::InvalidArgument {
-                    message: format!("Staged deployment template not found: {:?}", p),
-                };
-                tracing::error!("{}", e);
-                return Err(e);
-            }
+        if let Some(ref p) = staged_deployment_template
+            && !p.exists()
+        {
+            let e = ArcellaError::InvalidArgument {
+                message: format!("Staged deployment template not found: '{}'", p.display()),
+            };
+            tracing::error!("{e}");
+            return Err(e);
         }
 
-        Ok(InstallPackage {
+        Ok(Self {
             package_dir: Some(staging_dir),
             wasm_path: staged_wasm,
             component_toml_path: staged_component_toml,
@@ -183,28 +181,28 @@ impl InstallPackage {
     pub fn validate_paths_exist(&self) -> ArcellaResult<()> {
         if !self.wasm_path.exists() {
             let e = ArcellaError::InvalidArgument {
-                message: format!("WASM file not found: {:?}", self.wasm_path),
+                message: format!("WASM file not found: '{}'", self.wasm_path.display()),
             };
             tracing::error!("{}", e);
             return Err(e);
         }
-        if let Some(ref p) = self.component_toml_path {
-            if !p.exists() {
-                let e = ArcellaError::InvalidArgument {
-                    message: format!("Component TOML not found: {:?}", p),
-                };
-                tracing::error!("{}", e);
-                return Err(e);
-            }
+        if let Some(ref p) = self.component_toml_path
+            && !p.exists()
+        {
+            let e = ArcellaError::InvalidArgument {
+                message: format!("Component TOML not found: '{}'", p.display()),
+            };
+            tracing::error!("{}", e);
+            return Err(e);
         }
-        if let Some(ref p) = self.deployment_template_path {
-            if !p.exists() {
-                let e = ArcellaError::InvalidArgument {
-                    message: format!("Deployment template not found: {:?}", p),
-                };
-                tracing::error!("{}", e);
-                return Err(e);
-            }
+        if let Some(ref p) = self.deployment_template_path
+            && !p.exists()
+        {
+            let e = ArcellaError::InvalidArgument {
+                message: format!("Deployment template not found: '{}'", p.display()),
+            };
+            tracing::error!("{}", e);
+            return Err(e);
         }
         Ok(())
     }
@@ -227,7 +225,7 @@ impl InstallPackage {
 pub async fn validate_install_package(wasm_path: &Path) -> ArcellaResult<InstallPackage> {
     if !wasm_path.is_file() {
         let e = ArcellaError::InvalidArgument {
-            message: format!("Path is not a file: {:?}", wasm_path),
+            message: format!("Path is not a file: '{}'", wasm_path.display()),
         };
         tracing::error!("{}", e);
         return Err(e);
@@ -243,8 +241,10 @@ pub async fn validate_install_package(wasm_path: &Path) -> ArcellaResult<Install
     }
 
     // Construct expected sibling paths
-    let component_toml_path = sibling_path_with_suffix(wasm_path, ".component.toml");
-    let deployment_template_path = sibling_path_with_suffix(wasm_path, ".deployment.template.toml");
+    let component_toml_path = wasm_path.with_extension("component.toml");
+    let deployment_template_path = wasm_path.with_extension("deployment.template.toml");
+    // let component_toml_path = sibling_path_with_suffix(wasm_path, ".component.toml");
+    // let deployment_template_path = sibling_path_with_suffix(wasm_path, ".deployment.template.toml");
 
     Ok(InstallPackage {
         package_dir: None,
@@ -289,7 +289,7 @@ pub async fn prepare_install_package_in_temp(
         },
     };
 
-    package.from_staging_dir(staging_dir)
+    package.with_staging_dir(staging_dir)
 }
 
 /// Ensures a module with the given ID is not already installed.
@@ -312,14 +312,14 @@ pub async fn check_module_not_installed(
     let mod_id = module_id.to_string();
     if state.installed_modules.contains_key(&mod_id) {
         let e = ArcellaError::ModuleAlreadyInstalled(mod_id);
-        tracing::warn!("{}", e);
+        tracing::warn!("{e}");
         return Err(e);
     }
 
     let dest_dir = modules_dir.join(&mod_id);
     if dest_dir.exists() {
         let e = ArcellaError::ModuleDirAlreadyExists(mod_id);
-        tracing::warn!("{}", e);
+        tracing::warn!("{e}");
         return Err(e);
     }
 
@@ -348,51 +348,27 @@ pub async fn install_module_files_to_storage(
     staged.validate_paths_exist()?;
 
     // Step 1: Create temporary destination under modules_dir
-    let temp_dest_dir = match create_temp_subdir(modules_dir, Some(&module_id.to_string())).await {
-        Ok(dir) => dir,
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(e.into());
-        },
-    };
+    let temp_dest_dir = create_temp_subdir(modules_dir, Some(&module_id.to_string()))
+        .await
+        .inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 2: Copy all files into the temporary destination
     let source_files = staged.existing_file_paths_owned();
-    let _ = match copy_files_to_dir(&source_files, &temp_dest_dir, true).await {
-        Ok(vec) => vec,
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(e.into());
-        },
-    };
+    let _ = copy_files_to_dir(&source_files, &temp_dest_dir, true)
+        .await
+        .inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 3: Ensure directory entries are persisted
-    match sync_directory(&temp_dest_dir).await {
-        Ok(_) => (),
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(e.into());
-        },
-    };
+    let () = sync_directory(&temp_dest_dir).await.inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 4: Atomically publish the module
-    let final_dest_dir = modules_dir.join(&module_id.to_string());
-    match atomic_rename(temp_dest_dir, final_dest_dir.clone()).await {
-        Ok(_) => (),
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(e.into());
-        },
-    };
+    let final_dest_dir = modules_dir.join(module_id.to_string());
+    let () = tokio::fs::rename(temp_dest_dir, &final_dest_dir)
+        .await
+        .inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 5: Ensure the new module_id entry is visible in parent dir
-    match sync_directory(modules_dir).await {
-        Ok(_) => (),
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(e.into());
-        },
-    };
+    let () = sync_directory(modules_dir).await.inspect_err(|e| tracing::error!("{e}"))?;
 
     Ok(final_dest_dir)
 }
@@ -498,7 +474,7 @@ mod tests {
             };
 
             let staged_package =
-                original_package.from_staging_dir(staging_temp.path().to_path_buf()).unwrap();
+                original_package.with_staging_dir(staging_temp.path().to_path_buf()).unwrap();
 
             assert_eq!(staged_package.wasm_path, staged_wasm);
             assert_eq!(staged_package.component_toml_path, Some(staged_toml));
@@ -518,8 +494,8 @@ mod tests {
                 deployment_template_path: None,
             };
 
-            let staging_dir = TempDir::new().unwrap().into_path();
-            let err = package.from_staging_dir(staging_dir).unwrap_err();
+            let staging_dir = TempDir::new().unwrap().keep();
+            let err = package.with_staging_dir(staging_dir).unwrap_err();
             assert!(err.to_string().contains("Staged WASM file not found"));
         }
 

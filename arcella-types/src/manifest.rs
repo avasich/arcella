@@ -12,7 +12,12 @@ use std::{str::FromStr, sync::OnceLock};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::{ArcellaTypeError, ArcellaTypeResult, interface_list::*, module_id::*};
+use crate::{
+    ArcellaTypeError,
+    ArcellaTypeResult,
+    interface_list::InterfaceList,
+    module_id::ModuleId,
+};
 
 /// A portable, human-readable descriptor of a WebAssembly component.
 ///
@@ -115,7 +120,7 @@ impl<'de> Deserialize<'de> for ComponentManifest {
             // Format 1: string → only id, rest default
             ComponentManifestDeserializeHelper::StringId(s) => {
                 let id = ModuleId::from_str(&s).map_err(serde::de::Error::custom)?;
-                Ok(ComponentManifest {
+                Ok(Self {
                     id,
                     description: None,
                     exports: InterfaceList::default(),
@@ -131,7 +136,7 @@ impl<'de> Deserialize<'de> for ComponentManifest {
                 exports,
                 imports,
                 capabilities,
-            } => Ok(ComponentManifest {
+            } => Ok(Self {
                 id,
                 description,
                 exports,
@@ -149,7 +154,7 @@ impl<'de> Deserialize<'de> for ComponentManifest {
                 capabilities,
             } => {
                 let id = ModuleId::new(name, version).map_err(serde::de::Error::custom)?;
-                Ok(ComponentManifest {
+                Ok(Self {
                     id,
                     description,
                     exports,
@@ -174,16 +179,14 @@ impl ComponentManifest {
         for key in self.imports.keys() {
             if !Self::validate_interface_format(key) {
                 return Err(ArcellaTypeError::Manifest(format!(
-                    "Invalid import interface format: {}",
-                    key
+                    "Invalid import interface format: {key}"
                 )));
             }
         }
         for key in self.exports.keys() {
             if !Self::validate_interface_format(key) {
                 return Err(ArcellaTypeError::Manifest(format!(
-                    "Invalid export interface format: {}",
-                    key
+                    "Invalid export interface format: {key}"
                 )));
             }
         }
@@ -388,7 +391,7 @@ mod tests {
         };
 
         let json = serde_json::to_string_pretty(&manifest).unwrap();
-        eprintln!("JSON:\n{}", json);
+        eprintln!("JSON:\n{json}");
 
         let restored: ComponentManifest = serde_json::from_str(&json).unwrap();
         assert_eq!(manifest, restored);

@@ -87,16 +87,13 @@ impl ValueExt for TomlValue {
             TomlEditValue::Float(f) => Self::Float(OrderedFloat(*f.value())),
             TomlEditValue::Boolean(b) => Self::Boolean(*b.value()),
             TomlEditValue::Array(array) => {
-                let inner_values: Vec<TomlValue> = array
-                    .iter()
-                    .map(|v| Self::from_toml_value(v))
-                    .collect::<ArcellaUtilsResult<_>>()?;
+                let inner_values: Vec<Self> =
+                    array.iter().map(Self::from_toml_value).collect::<ArcellaUtilsResult<_>>()?;
                 Self::Array(inner_values)
             },
             _ => {
-                return Err(ArcellaUtilsError::TOML(format!(
-                    "Unsupported TOML value type: {:?}",
-                    value
+                return Err(ArcellaUtilsError::Toml(format!(
+                    "Unsupported TOML value type: {value:?}"
                 )));
             },
         };
@@ -111,7 +108,7 @@ impl ValueExt for TomlValue {
 /// because Arcella uses `toml_edit` only for parsing, not for round-trip editing.
 fn inline_table_to_table(inline: &InlineTable) -> Table {
     let mut table = Table::new();
-    for (key, item) in inline.iter() {
+    for (key, item) in inline {
         table.insert(key, item.into());
     }
     table
@@ -250,7 +247,6 @@ fn table_to_value_map_recursive(
 /// ```text
 /// key: "servers", value: Array([Map{"name": "a"}, Map{"name": "b"}])
 /// ```
-
 ///
 /// # Arguments
 ///
@@ -312,7 +308,7 @@ pub fn collect_paths_recursive(
 ///
 /// Returns `ArcellaUtilsError::TOML` if the input is not valid TOML.
 pub fn parse(content: &str) -> ArcellaUtilsResult<DocumentMut> {
-    content.parse::<DocumentMut>().map_err(|e| ArcellaUtilsError::TOML(format!("{}", e)))
+    content.parse::<DocumentMut>().map_err(|e| ArcellaUtilsError::Toml(format!("{e}")))
 }
 
 /// Extracts configuration data from a parsed TOML document.
@@ -372,6 +368,8 @@ mod tests {
     use super::*;
 
     mod parse_config_and_collect_includes_tests {
+        use std::fmt::Write as _;
+
         use super::*;
 
         #[test]
@@ -380,15 +378,15 @@ mod tests {
 
             let mut path = "l0".to_string();
             for i in 1..=MAX_DEPTH + 1 {
-                path.push_str(&format!(".l{}", i));
+                write!(&mut path, ".l{i}").unwrap();
             }
-            let content = format!("[{}]\nvalue = \"deep\"", path);
+            let content = format!("[{path}]\nvalue = \"deep\"");
 
             let (data, result) = parse_and_collect(&content, &[], 0).unwrap();
 
             assert_eq!(result, TraversalResult::Pruned);
 
-            assert!(!data.values.contains_key(&format!("{}.value", path)));
+            assert!(!data.values.contains_key(&format!("{path}.value")));
         }
 
         #[test]
@@ -498,7 +496,7 @@ mod tests {
             includes = ["config.d/*.toml", "local.toml", "secrets.toml"]
             "#;
 
-            let config = parse_and_collect(config_content, &vec!["config".to_string()], 0).unwrap();
+            let config = parse_and_collect(config_content, &["config".to_string()], 0).unwrap();
 
             let expected_includes = vec![
                 "config.d/*.toml".to_string(),
@@ -567,7 +565,7 @@ mod tests {
 
             assert!(result.is_err());
             match result.unwrap_err() {
-                ArcellaUtilsError::TOML(_) => {}, // OK
+                ArcellaUtilsError::Toml(_) => {}, // OK
                 _ => panic!("Expected ArcellaUtilsError::TOML"),
             }
         }
@@ -723,11 +721,11 @@ mod tests {
 
             // Создаём inline-таблицу на глубине MAX_DEPTH + 1
             // Create inline-table with depth up to MAX_DEPTH + 1
-            let mut inner = format!("inner = {{ x = {} }}", START_IDX);
-            for i in 1..MAX_DEPTH + 1 {
+            let mut inner = format!("inner = {{ x = {START_IDX} }}");
+            for i in 1..=MAX_DEPTH {
                 inner = format!("inner = {{ x = {}, {} }}", START_IDX + i, inner);
             }
-            let content = format!("[top]\n{}", inner);
+            let content = format!("[top]\n{inner}");
 
             let (config, traversal_result) = parse_and_collect(&content, &[], FILIE_IDX).unwrap();
 
@@ -736,15 +734,10 @@ mod tests {
 
             assert_eq!(config.values.len(), 8);
 
-            for (num, (_, (value, idx))) in (&config.values).iter().enumerate() {
-                match value {
-                    TomlValue::Integer(val) => {
-                        assert_eq!(*val, (START_IDX + MAX_DEPTH - num) as i64);
-                    },
-                    _ => {
-                        panic!("Error values!")
-                    },
-                }
+            for (num, (_, (value, idx))) in config.values.iter().enumerate() {
+                #[allow(clippy::cast_possible_wrap)]
+                let int = (START_IDX + MAX_DEPTH - num) as i64;
+                assert_eq!(value, &TomlValue::Integer(int));
                 assert_eq!(*idx, FILIE_IDX);
             }
         }

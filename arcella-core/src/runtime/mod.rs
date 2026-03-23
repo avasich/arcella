@@ -32,19 +32,24 @@ use crate::{
 };
 
 mod state;
-use state::*;
+use state::ArcellaState;
 
 mod context;
 pub use context::*;
 
 mod mutators;
-use mutators::*;
+use mutators::{ArcellaMutation, InstallModule};
 
 mod install;
-use install::*;
+use install::{
+    check_module_not_installed,
+    install_module_files_to_storage,
+    prepare_install_package_in_temp,
+    validate_install_package,
+};
 
 mod deploy;
-use deploy::*;
+use deploy::{prepare_deploy_package_in_temp, validate_deploy_package};
 
 pub struct ArcellaRuntimeEnvironment {
     pub pid: u32,
@@ -83,7 +88,7 @@ impl ArcellaRuntime {
         let metadata_dir = storage.metadata_dir.clone();
         let state_manager = StateManager::open(&metadata_dir, "arcella.wal.jsonl").await?;
 
-        let engine = match wasmtime::Engine::new(&wasmtime::Config::new().async_support(true)) {
+        let engine = match wasmtime::Engine::new(wasmtime::Config::new().async_support(true)) {
             Ok(engine) => engine,
             Err(e) => {
                 tracing::error!("Failed to create Wasmtime engine: {}", e);
@@ -110,15 +115,17 @@ impl ArcellaRuntime {
     }
 
     pub fn status(&self) -> ArcellaResult<ArcellaRuntimeStatus> {
-        let env = self.environment.try_read().expect("Runtime environment poisoned");
+        let ArcellaRuntimeEnvironment { pid, start_utc, .. } =
+            *self.environment.try_read().expect("Runtime environment poisoned");
 
-        return Ok(ArcellaRuntimeStatus {
-            pid: env.pid,
-            start_time: env.start_utc,
+        Ok(ArcellaRuntimeStatus {
+            pid,
+            start_time: start_utc,
             uptime: self.uptime(),
-        });
+        })
     }
 
+    #[must_use]
     pub fn uptime(&self) -> std::time::Duration {
         let env = self.environment.try_read().expect("Runtime environment poisoned");
         env.start_instant.elapsed()
@@ -183,7 +190,7 @@ impl ArcellaRuntime {
                 tracing::error!("Failed to record module installation: {}", e);
                 return Err(e.into());
             },
-        };
+        }
         tracing::info!("Module installed and recorded in state: {}", module_id);
 
         // 7. Cleanup staging directory
@@ -224,13 +231,13 @@ impl ArcellaRuntime {
     pub async fn module_start(&mut self, deployment_id: &str) -> ArcellaResult<String> {
         tracing::debug!("Runtime: Starting module {:?}", deployment_id);
 
-        Ok(format!("Started"))
+        Ok("Started".to_string())
     }
 
     pub async fn module_stop(&mut self, deployment_id: &str) -> ArcellaResult<String> {
         tracing::debug!("Runtime: Stopping module {:?}", deployment_id);
 
-        Ok(format!("Stopped"))
+        Ok("Stopped".to_string())
     }
 
     #[cfg(test)]

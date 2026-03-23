@@ -41,7 +41,7 @@ use toml::value::Table;
 use crate::{
     ArcellaError,
     ArcellaResult,
-    utils::{fs as fs_utils, toml::parse_and_collect, types::*},
+    utils::{fs as fs_utils, toml::parse_and_collect, types::TomlFileData},
 };
 
 mod config_loader;
@@ -50,10 +50,10 @@ use config_loader::load_config_recursive_from_file;
 mod toml_files;
 
 mod types;
-use types::*;
+use types::{ConfigLoadParams, ConfigLoadState};
 
 mod warnings;
-use warnings::*;
+use warnings::ConfigLoadWarning;
 
 /// Standard prefix for all built-in Arcella configuration keys.
 pub const ARCELLA_PREFIX: &str = "arcella.";
@@ -151,11 +151,11 @@ impl IntegrityChecker {
             let metadata = std::fs::metadata(path)
                 .map_err(|e| ArcellaError::IoWithPath { source: e, path: path.clone() })?;
             let mtime = metadata.modified().map_err(|e| {
-                ArcellaError::Internal(format!("Cannot get mtime for {:?}: {}", path, e))
+                ArcellaError::Internal(format!("Cannot get mtime for '{}': {e}", path.display()))
             })?;
             initial_mtimes.insert(path.clone(), mtime);
         }
-        Ok(IntegrityChecker { paths, initial_mtimes })
+        Ok(Self { paths, initial_mtimes })
     }
 
     /// Checks whether any monitored file has been modified since startup.
@@ -193,8 +193,8 @@ fn add_no_redef_warning(
     warnings.push(ConfigLoadWarning::ValueError {
         key,
         error: format!(
-            "Value from file {:?} ignored due to no #redef flag in layer {}",
-            source_file_path, config_idx
+            "Value from file '{}' ignored due to no #redef flag in layer {config_idx}",
+            source_file_path.display(),
         ),
         file: source_file_path,
     });
@@ -211,14 +211,14 @@ fn check_mtimes_changed(
         if let Some(initial_mtime) = initial_mtimes.get(path) {
             if current_mtime != initial_mtime {
                 return Err(ArcellaError::Internal(format!(
-                    "Config integrity violation: file {:?} was modified after startup",
-                    path
+                    "Config integrity violation: file '{}' was modified after startup",
+                    path.display()
                 )));
             }
         } else {
             return Err(ArcellaError::Internal(format!(
-                "Config integrity violation: file {:?} not found in initial list",
-                path
+                "Config integrity violation: file '{}' not found in initial list",
+                path.display()
             )));
         }
     }
@@ -239,7 +239,10 @@ async fn get_current_mtimes(
                     .await
                     .map_err(|e| ArcellaError::IoWithPath { source: e, path: path.clone() })?;
                 let mtime = metadata.modified().map_err(|e| {
-                    ArcellaError::Internal(format!("Cannot get mtime for {:?}: {}", path, e))
+                    ArcellaError::Internal(format!(
+                        "Cannot get mtime for '{}': {e}",
+                        path.display()
+                    ))
                 })?;
                 Ok::<(PathBuf, std::time::SystemTime), ArcellaError>((path, mtime))
             }
@@ -289,8 +292,8 @@ async fn ensure_main_config_exists(
             }
         })?;
         warnings.push(ConfigLoadWarning::Internal(format!(
-            "Created default config template at {:?}",
-            template_path
+            "Created default config template at '{}'",
+            template_path.display()
         )));
     }
 
@@ -299,8 +302,8 @@ async fn ensure_main_config_exists(
         // TODO: Potential race condition if another process creates the file between `exists()` and `copy()`.
         fs::copy(&template_path, &main_config_path).await?;
         warnings.push(ConfigLoadWarning::Internal(format!(
-            "Created default config at {:?}",
-            main_config_path
+            "Created default config at '{}'",
+            main_config_path.display()
         )));
     }
 
@@ -351,12 +354,12 @@ pub async fn load() -> ArcellaResult<(ArcellaConfig, Vec<ConfigLoadWarning>)> {
     // 6. Register built-in default config
     let (file_idx, _) = state.config_files.insert_full(PathBuf::from(DEFAULT_CONFIG_FILENAME));
     let (default_config, _) =
-        parse_and_collect(DEFAULT_CONFIG_CONTENT, &vec!["arcella".to_string()], file_idx)?;
+        parse_and_collect(DEFAULT_CONFIG_CONTENT, &["arcella".to_string()], file_idx)?;
 
     // 7. Set up loading parameters
     let params = ConfigLoadParams {
         prefix: vec!["arcella".to_string()],
-        config_dir: config_dir.to_path_buf(),
+        config_dir: config_dir.clone(),
     };
 
     // 8. Load main config and all included files recursively
@@ -390,17 +393,17 @@ pub async fn load() -> ArcellaResult<(ArcellaConfig, Vec<ConfigLoadWarning>)> {
 
 /// Helper to extract a required string path value from config by suffix.
 fn extract_path_value(config: &ConfigValues, suffix: &str) -> ArcellaResult<PathBuf> {
-    let full_key = format!("{}{}", ARCELLA_PREFIX, suffix);
+    let full_key = format!("{ARCELLA_PREFIX}{suffix}");
     match config.get(&full_key) {
         Some((TomlValue::String(s), _)) => Ok(PathBuf::from(s)),
-        _ => Err(ArcellaError::Internal(format!("{} is not set or not a string", full_key))),
+        _ => Err(ArcellaError::Internal(format!("{full_key} is not set or not a string"))),
     }
 }
 
 /// Merges configuration layers according to Arcella's strict override and extension rules.
 fn merge_config(
     default_config: &TomlFileData,
-    configs: &Vec<TomlFileData>,
+    configs: &[TomlFileData],
     config_files: &IndexSet<PathBuf>,
     config_dir: &Path,
     warnings: &mut Vec<ConfigLoadWarning>,
@@ -412,34 +415,33 @@ fn merge_config(
         let config = &configs[config_idx];
         for (key, (value, file_idx)) in &config.values {
             // Check if the key ends with #redef
-            let (actual_key, is_redef) = if key.ends_with(REDEF_SUFFIX) {
-                // Extract the original key without the #redef suffix
-                (key[..key.len() - REDEF_SUFFIX.len()].to_string(), true)
-            } else {
-                (key.clone(), false)
-            };
+            let (actual_key, is_redef) = key
+                .strip_suffix(REDEF_SUFFIX)
+                .map_or_else(|| (key.clone(), false), |key| (key.to_string(), true));
 
             match preliminary_values.entry(actual_key.clone()) {
                 Entry::Occupied(mut e) => {
                     // Current layer has HIGHER priority (lower idx) than the existing entry
-                    if !is_redef {
-                        add_no_redef_warning(
-                            actual_key.clone(),
-                            config_idx,
-                            config_files,
-                            e.get().source_file_idx,
-                            warnings,
-                        );
-                        // Lower-priority layer is ignored; higher-priority layer sets the value.
-                        // Overwrite
-                        let e = e.get_mut();
-                        e.value = value.clone();
-                        e.source_config_idx = config_idx;
-                        e.source_file_idx = *file_idx;
-                    } else {
+                    if is_redef {
                         // The key `actual_key` was already defined in a lower-priority layer
                         e.get_mut().redef_allowed_by = Some(*file_idx);
+                        continue;
                     }
+
+                    add_no_redef_warning(
+                        actual_key.clone(),
+                        config_idx,
+                        config_files,
+                        e.get().source_file_idx,
+                        warnings,
+                    );
+
+                    // Lower-priority layer is ignored; higher-priority layer sets the value.
+                    // Overwrite
+                    let e = e.get_mut();
+                    e.value = value.clone();
+                    e.source_config_idx = config_idx;
+                    e.source_file_idx = *file_idx;
                 },
                 Entry::Vacant(_) => {
                     // No value for this key yet. Store the current value
@@ -520,10 +522,9 @@ fn merge_config(
                     warnings.push(ConfigLoadWarning::ValueError {
                         key: key.clone(),
                         error: format!(
-                            "Value from layer {} ignored due to missing in default config",
-                            insert_index
+                            "Value from layer {insert_index} ignored due to missing in default config"
                         ),
-                        file: PathBuf::from(format!("layer_{}.toml", insert_index)),
+                        file: PathBuf::from(format!("layer_{insert_index}.toml")),
                     });
                 }
             },
@@ -549,9 +550,10 @@ fn merge_config(
 /// ```
 ///
 /// Nested keys (e.g., `arcella.cache.redis.host`) are converted into nested TOML tables.
+#[must_use]
 pub fn extract_subtree(config: &ConfigValues, prefix: &str) -> Table {
     let mut table = Table::new();
-    let prefix_with_dot = format!("{}.", prefix);
+    let prefix_with_dot = format!("{prefix}.");
 
     for (key, (value, _)) in config {
         if key.starts_with(&prefix_with_dot) {
@@ -596,7 +598,7 @@ fn toml_value_to_toml(value: &TomlValue) -> toml::Value {
         TomlValue::Boolean(b) => toml::Value::Boolean(*b),
         TomlValue::Float(OrderedFloat(f)) => toml::Value::Float(*f),
         // Fallback for unsupported types (arrays, tables) — should not occur in MVP
-        _ => toml::Value::String(format!("{:?}", value)),
+        _ => toml::Value::String(format!("{value:?}")),
     }
 }
 
@@ -682,8 +684,8 @@ mod tests {
         // Verify warnings
         assert_eq!(warnings.len(), 2);
 
-        let warning1 = &warnings[0];
-        match warning1 {
+        let warn_1 = &warnings[0];
+        match warn_1 {
             ConfigLoadWarning::ValueError { key, error, .. } => {
                 assert_eq!(key, "arcella.server.host");
                 assert!(error.contains("ignored due to no #redef flag in layer "));
@@ -691,8 +693,8 @@ mod tests {
             _ => panic!("Expected ValueError for arcella.server.host"),
         }
 
-        let warning2 = &warnings[1];
-        match warning2 {
+        let warn_2 = &warnings[1];
+        match warn_2 {
             ConfigLoadWarning::ValueError { key, error, .. } => {
                 assert_eq!(key, "arcella.server.name");
                 assert!(error.contains("ignored due to missing in default config"));
@@ -756,21 +758,25 @@ mod tests {
         assert_eq!(result.get("arcella.server.host"), Some(&(make_toml_value("192.168.1.1"), 1))); // Remains value from arcella.toml
 
         assert_eq!(warnings.len(), 2);
-        let warning_1 = &warnings[0];
-        match warning_1 {
+        let w1 = &warnings[0];
+        match w1 {
             ConfigLoadWarning::ValueError { key, error, .. } => {
                 assert_eq!(key, "arcella.server.host");
-                assert!(error.contains("Value from file \"config/level_2.toml\" ignored due to no #redef flag in layer 0"));
+                assert!(error.contains(
+                    "Value from file 'config/level_2.toml' ignored due to no #redef flag in layer 0"
+                ));
             },
             _ => panic!(
                 "Expected ValueError for arcella.server.host due to missing #redef in arcella.toml when layer 2 tried to set it"
             ),
         }
-        let warning_2 = &warnings[1];
-        match warning_2 {
+        let w2 = &warnings[1];
+        match w2 {
             ConfigLoadWarning::ValueError { key, error, .. } => {
                 assert_eq!(key, "arcella.server.port");
-                assert!(error.contains("Value from file \"config/level_1.toml\" ignored due to no #redef flag in layer 0"));
+                assert!(error.contains(
+                    "Value from file 'config/level_1.toml' ignored due to no #redef flag in layer 0"
+                ));
             },
             _ => panic!(
                 "Expected ValueError for arcella.server.port due to missing #redef in arcella.toml when layer 1 tried to set it"

@@ -38,9 +38,8 @@ use crate::{ArcellaError, ArcellaResult};
 /// `true` if the path is a valid TOML file according to the criteria, `false` otherwise.
 pub fn is_valid_toml_file_path(path: &Path) -> bool {
     // 1. Get the file name if it exists
-    let file_name = match path.file_name() {
-        Some(name) => name,
-        None => return false,
+    let Some(file_name) = path.file_name() else {
+        return false;
     };
 
     // 2. Convert to string, but only if it's valid UTF-8 and ASCII
@@ -224,7 +223,7 @@ pub async fn collect_toml_includes(
 
     let dir_scan_futures = include_dirs.into_iter().map(|dir_path| async move {
         // find_toml_files_in_dir returns Option<Vec<PathBuf>>, we map it to Vec<PathBuf>
-        find_toml_files_in_dir(&dir_path).await.map(|opt| opt.unwrap_or_default())
+        find_toml_files_in_dir(&dir_path).await.map(Option::unwrap_or_default)
     });
 
     // Execute all file checks and directory scans in parallel
@@ -285,7 +284,7 @@ mod tests {
 
             let expected_names: Vec<String> = vec!["config1.toml", "config2.toml", "Config3.TOML"]
                 .into_iter()
-                .map(|s| s.to_string())
+                .map(str::to_string)
                 .collect();
 
             let actual_names: Vec<String> = files

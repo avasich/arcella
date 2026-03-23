@@ -95,9 +95,9 @@ fn to_spec_with_depth(
             Ok(ComponentItemSpec::ComponentFunc { params, results })
         },
 
-        ComponentItem::CoreFunc(ty) => Ok(ComponentItemSpec::CoreFunc(format!("{}", ty))),
+        ComponentItem::CoreFunc(ty) => Ok(ComponentItemSpec::CoreFunc(format!("{ty}"))),
 
-        ComponentItem::Module(ty) => Ok(ComponentItemSpec::Module(format!("{:?}", ty))),
+        ComponentItem::Module(ty) => Ok(ComponentItemSpec::Module(format!("{ty:?}"))),
 
         ComponentItem::Component(comp_ty) => {
             let imports = comp_ty
@@ -109,7 +109,7 @@ fn to_spec_with_depth(
                             Ok(item) => item,
                             // Best-effort parsing: skip malformed nested items
                             Err(e) => ComponentItemSpec::Unknown {
-                                debug: Some(format!("Error: {:?}", e)),
+                                debug: Some(format!("Error: {e:?}")),
                             },
                         },
                     )
@@ -124,7 +124,7 @@ fn to_spec_with_depth(
                             Ok(item) => item,
                             // Best-effort parsing: skip malformed nested items
                             Err(e) => ComponentItemSpec::Unknown {
-                                debug: Some(format!("Error: {:?}", e)),
+                                debug: Some(format!("Error: {e:?}")),
                             },
                         },
                     )
@@ -143,7 +143,7 @@ fn to_spec_with_depth(
                             Ok(item) => item,
                             // Best-effort parsing: skip malformed nested items
                             Err(e) => ComponentItemSpec::Unknown {
-                                debug: Some(format!("Error: {:?}", e)),
+                                debug: Some(format!("Error: {e:?}")),
                             },
                         },
                     )
@@ -154,12 +154,12 @@ fn to_spec_with_depth(
 
         ComponentItem::Type(ty) => {
             // TODO(v0.4): Replace with WIT type name via `wit-parser` or canonical string
-            Ok(ComponentItemSpec::Type(format!("{:?}", ty)))
+            Ok(ComponentItemSpec::Type(format!("{ty:?}")))
         },
 
         ComponentItem::Resource(ty) => {
             // TODO(v0.4): Replace with WIT type name via `wit-parser` or canonical string
-            Ok(ComponentItemSpec::Resource(format!("{:?}", ty)))
+            Ok(ComponentItemSpec::Resource(format!("{ty:?}")))
         },
     }
 }
@@ -179,7 +179,7 @@ fn type_to_string(ty: &types::Type) -> String {
         types::Type::Float64 => "f64".into(),
         types::Type::Char => "char".into(),
         types::Type::String => "string".into(),
-        _ => format!("unknown({:?})", ty),
+        _ => format!("unknown({ty:?})"),
     }
 }
 
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn test_recursion_limit() -> ArcellaWasmtimeResult<()> {
         let engine = Engine::default();
-        let wat = r#"(component)"#;
+        let wat = r"(component)";
         let component = Component::new(&engine, wat)?;
         let ty = component.component_type();
 

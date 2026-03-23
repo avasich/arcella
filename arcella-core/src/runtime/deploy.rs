@@ -47,16 +47,13 @@ impl DeployPackage {
     /// Only includes paths that are `Some`. The `.wasm` path is always included.
     /// Order is deterministic but should not be relied upon externally.
     pub fn existing_file_paths_owned(&self) -> Vec<PathBuf> {
-        let mut paths = Vec::with_capacity(1);
-        paths.push(self.deployment_toml_path.clone());
-
-        paths
+        vec![self.deployment_toml_path.clone()]
     }
 
     /// Reconstructs a `DeployPackage` from a staging directory.
     ///
     /// Assumes the deployment file has been copied into `staging_dir` with its original name.
-    pub fn from_staging_dir(&self, staging_dir: PathBuf) -> ArcellaResult<Self> {
+    pub fn with_staging_dir(&self, staging_dir: PathBuf) -> ArcellaResult<Self> {
         let staged_path =
             staging_dir.join(self.deployment_toml_path.file_name().ok_or_else(|| {
                 ArcellaError::InvalidArgument {
@@ -66,11 +63,11 @@ impl DeployPackage {
 
         if !staged_path.exists() {
             return Err(ArcellaError::InvalidArgument {
-                message: format!("Staged deployment file not found: {:?}", staged_path),
+                message: format!("Staged deployment file not found: '{}'", staged_path.display()),
             });
         }
 
-        Ok(DeployPackage {
+        Ok(Self {
             package_dir: Some(staging_dir),
             deployment_toml_path: staged_path,
             deployment_id: self.deployment_id.clone(),
@@ -89,32 +86,23 @@ impl DeployPackage {
 pub async fn validate_deploy_package(deploy_path: &Path) -> ArcellaResult<DeployPackage> {
     if !deploy_path.is_file() {
         let e = ArcellaError::InvalidArgument {
-            message: format!("Path is not a file: {:?}", deploy_path),
+            message: format!("Path is not a file: '{}'", deploy_path.display()),
         };
-        tracing::error!("{}", e);
+        tracing::error!("{e}");
         return Err(e);
     }
 
     // Extract and validate deployment ID
-    let deployment_id = match base_name_from_file_with_ext(deploy_path, "deployment.toml") {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(ArcellaError::ArcellaUtilsError(e));
-        },
-    };
-    match validate_base_name(&deployment_id) {
-        Ok(_) => (),
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(ArcellaError::ArcellaUtilsError(e));
-        },
-    };
+    let deployment_id = base_name_from_file_with_ext(deploy_path, "deployment.toml")
+        .inspect_err(|e| tracing::error!("{e}"))?;
+
+    let () = validate_base_name(&deployment_id).inspect_err(|e| tracing::error!("{e}"))?;
+
 
     Ok(DeployPackage {
         package_dir: None,
         deployment_toml_path: deploy_path.to_path_buf(),
-        deployment_id: deployment_id.to_string(),
+        deployment_id,
     })
 }
 
@@ -142,5 +130,5 @@ pub async fn prepare_deploy_package_in_temp(
     let source_files = package.existing_file_paths_owned();
     let _ = copy_files_to_dir(&source_files, &staging_dir, false).await?;
 
-    package.from_staging_dir(staging_dir)
+    package.with_staging_dir(staging_dir)
 }

@@ -79,6 +79,7 @@ pub struct AlmeResponse {
 
 impl AlmeResponse {
     /// Create a successful response.
+    #[must_use]
     pub fn success(message: &str, data: Option<serde_json::Value>) -> Self {
         Self {
             success: true,
@@ -88,6 +89,7 @@ impl AlmeResponse {
     }
 
     /// Create an error response.
+    #[must_use]
     pub fn error(message: &str) -> Self {
         Self {
             success: false,
