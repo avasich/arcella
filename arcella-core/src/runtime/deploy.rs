@@ -15,12 +15,7 @@ use crate::{
     manifest::DeploymentSpec,
     runtime::state::ArcellaState,
     storage::StorageManager,
-    utils::fs::{
-        base_name_from_file_with_ext,
-        copy_files_to_dir,
-        create_temp_subdir,
-        validate_base_name,
-    },
+    utils::fs::{base_name_strip_ext, copy_files_to_dir, create_temp_subdir, validate_base_name},
 };
 
 /// Represents a validated module package ready for deployment.
@@ -93,11 +88,10 @@ pub async fn validate_deploy_package(deploy_path: &Path) -> ArcellaResult<Deploy
     }
 
     // Extract and validate deployment ID
-    let deployment_id = base_name_from_file_with_ext(deploy_path, "deployment.toml")
+    let deployment_id = base_name_strip_ext(deploy_path, "deployment.toml")
         .inspect_err(|e| tracing::error!("{e}"))?;
 
-    let () = validate_base_name(&deployment_id).inspect_err(|e| tracing::error!("{e}"))?;
-
+    validate_base_name(&deployment_id).inspect_err(|e| tracing::error!("{e}"))?;
 
     Ok(DeployPackage {
         package_dir: None,

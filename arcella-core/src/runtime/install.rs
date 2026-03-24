@@ -36,12 +36,7 @@ use crate::{
     ArcellaResult,
     runtime::state::ArcellaState,
     storage::StorageManager,
-    utils::fs::{
-        base_name_from_file_with_ext,
-        copy_files_to_dir,
-        create_temp_subdir,
-        sync_directory,
-    },
+    utils::fs::{base_name_strip_ext, copy_files_to_dir, create_temp_subdir, sync_directory},
 };
 
 /// Represents a validated module package ready for installation.
@@ -232,13 +227,7 @@ pub async fn validate_install_package(wasm_path: &Path) -> ArcellaResult<Install
     }
 
     // Validate extension and extract base name
-    match base_name_from_file_with_ext(wasm_path, "wasm") {
-        Ok(_) => (),
-        Err(e) => {
-            tracing::error!("{}", e);
-            return Err(ArcellaError::ArcellaUtilsError(e));
-        },
-    }
+    let _ = base_name_strip_ext(wasm_path, "wasm").inspect_err(|e| tracing::error!("{e}"))?;
 
     // Construct expected sibling paths
     let component_toml_path = wasm_path.with_extension("component.toml");
@@ -359,16 +348,16 @@ pub async fn install_module_files_to_storage(
         .inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 3: Ensure directory entries are persisted
-    let () = sync_directory(&temp_dest_dir).await.inspect_err(|e| tracing::error!("{e}"))?;
+    sync_directory(&temp_dest_dir).await.inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 4: Atomically publish the module
     let final_dest_dir = modules_dir.join(module_id.to_string());
-    let () = tokio::fs::rename(temp_dest_dir, &final_dest_dir)
+    tokio::fs::rename(temp_dest_dir, &final_dest_dir)
         .await
         .inspect_err(|e| tracing::error!("{e}"))?;
 
     // Step 5: Ensure the new module_id entry is visible in parent dir
-    let () = sync_directory(modules_dir).await.inspect_err(|e| tracing::error!("{e}"))?;
+    sync_directory(modules_dir).await.inspect_err(|e| tracing::error!("{e}"))?;
 
     Ok(final_dest_dir)
 }

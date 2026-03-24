@@ -20,7 +20,7 @@
 //! to process TOML-based configurations in a consistent way.
 
 use std::{
-    env,
+    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
@@ -29,45 +29,77 @@ use uuid::Uuid;
 
 use super::error::{ArcellaUtilsError, ArcellaUtilsResult};
 
-/// Determines the base directory for Arcella based on the executable location or environment.
-///
-/// The function follows this priority order:
-/// 1. If the executable is located in a `bin` subdirectory and if parent of `bin` is not root
-///    directory, the parent of `bin` is use.
-/// 2. If the current directory (where the executable is run from) contains a `config` subdirectory,
-///    the current directory is used.
-/// 3. Otherwise, the user's home directory joined with `.arcella` is used.
-///
-/// # Returns
-///
-/// A `Result` containing the determined `PathBuf` or an error if the home directory
-/// cannot be determined.
-pub async fn find_base_dir() -> ArcellaUtilsResult<PathBuf> {
-    if let Ok(current_exe) = env::current_exe()
-        && let Some(parent) = current_exe.parent()
-    {
-        // Case 1: executable is in a `bin` directory
-        // Avoid using root directory (e.g., /bin → /) as base dir
-        if parent.file_name() == Some(std::ffi::OsStr::new("bin"))
-            && let Some(grandparent) = parent.parent()
-            && grandparent.parent().is_some()
-        {
-            return Ok(grandparent.to_path_buf());
-        }
+#[derive(Debug)]
+pub struct AppDirs {
+    pub base: PathBuf,
+    pub config: PathBuf,
+}
 
-        // Case 2: check if current_exe's parent has a `config` dir
-        let local_config = parent.join("config");
-        if let Ok(metadata) = fs::metadata(&local_config).await
-            && metadata.is_dir()
-        {
-            return Ok(parent.to_path_buf());
-        }
-    }
+/// Returns the base and configuration directories for the application.
+///
+/// Checks the following locations in order, returning the first match:
+///
+/// 1. **Exe-relative** – if `exe_path` is inside `<root>/` or `<root>/bin/`
+///    and `<root>/config/` exists: base = `<root>`, config = `<root>/config/`.
+///    `/bin/` directly under the filesystem root is excluded.
+/// 2. **XDG / platform dirs** – config = `{config_dir}/arcella/`,
+///    base = `{data_dir}/arcella/` with `{home}/arcella/` as a fallback.
+/// 3. **Home dir fallback** – base = `{home}/.arcella/`, config = `{home}/.arcella/config/`.
+///    Used only if the platform config dir cannot be determined.
+///
+/// Options 2 and 3 are not checked for existence.
+///
+/// # Examples
+///
+/// ```
+/// // /opt/arcella/bin/exe + /opt/arcella/config/ exists
+/// //   -> base:   /opt/arcella,
+/// //   -> config: /opt/arcella/config
+/// // config_dir and data_dir available
+/// //   -> base:   ~/.local/share/arcella
+/// //   -> config: ~/.config/arcella
+/// // config_dir available, data_dir not
+/// //   -> base:   ~/.arcella,
+/// //   -> config: ~/.config/arcella
+/// // config_dir is not available
+/// //   -> base:   ~/.arcella
+/// //   -> config: ~/.arcella/config
+/// ```
+pub fn get_app_dirs(exe_path: Option<&impl AsRef<Path>>) -> ArcellaUtilsResult<AppDirs> {
+    exe_path
+        .and_then(|exe| {
+            let exe_dir = exe.as_ref().parent().filter(|p| !p.as_os_str().is_empty())?;
 
-    // Case 3: fallback to ~/.arcella
-    dirs::home_dir()
-        .map(|d| d.join(".arcella"))
-        .ok_or_else(|| ArcellaUtilsError::Internal("Cannot determine home directory".into()))
+            let base = if exe_dir.ends_with("bin") {
+                let grandparent = exe_dir.parent()?;
+                grandparent.parent()?;
+                grandparent
+            } else {
+                exe_dir
+            };
+
+            let config = base.join("config");
+            config.is_dir().then_some(AppDirs {
+                base: base.to_path_buf(),
+                config,
+            })
+        })
+        .or_else(|| {
+            let home_base = || dirs::home_dir().map(|h| h.join("myapp"));
+            let config = dirs::config_dir().map(|dir| dir.join("myapp"));
+
+            if let Some(config) = config {
+                let base = dirs::data_dir().map(|dir| dir.join("myapp")).or_else(home_base)?;
+                Some(AppDirs { base, config })
+            } else {
+                let base = home_base()?;
+                Some(AppDirs {
+                    config: base.join("config"),
+                    base,
+                })
+            }
+        })
+        .ok_or_else(|| ArcellaUtilsError::Internal("Cannot determine app directories".into()))
 }
 
 
@@ -75,7 +107,7 @@ pub async fn find_base_dir() -> ArcellaUtilsResult<PathBuf> {
 ///
 /// The directory name follows the pattern:
 /// - `{prefix}.tmp-{uuid}` if `prefix` is provided,
-/// - `tmp-{uuid}` if no prefix.
+/// - `tmp-{uuid}` otherwise.
 ///
 /// The UUID (v4) ensures global uniqueness across processes and reboots.
 /// Invalid characters in `prefix` are replaced with underscores to ensure portability.
@@ -94,23 +126,21 @@ pub async fn create_temp_subdir(
     parent_dir: &Path,
     prefix: Option<&str>,
 ) -> ArcellaUtilsResult<PathBuf> {
-    let uuid_part = Uuid::new_v4();
+    let uuid_part = Uuid::new_v4().simple();
 
     let temp_name = prefix.map_or_else(
-        || format!("tmp-{}", uuid_part.simple()),
+        || format!("tmp-{uuid_part}"),
         |p| {
             // Sanitize prefix to filesystem-safe characters
-            let clean_prefix = p
-                .chars()
-                .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-                .collect::<String>();
-            format!("{}.tmp-{}", clean_prefix, uuid_part.simple())
+            let clean_prefix =
+                p.replace(|c: char| !c.is_ascii_alphanumeric() && !matches!(c, '_' | '-'), "_");
+            format!("{clean_prefix}.tmp-{uuid_part}")
         },
     );
 
     let temp_path = parent_dir.join(temp_name);
 
-    fs::create_dir_all(&temp_path).await.map_err(|e| ArcellaUtilsError::IoWithPath {
+    tokio::fs::create_dir_all(&temp_path).await.map_err(|e| ArcellaUtilsError::IoWithPath {
         source: e,
         path: temp_path.clone(),
     })?;
@@ -245,37 +275,20 @@ const MAX_BASE_NAME_LENGTH: usize = 128;
 /// # Errors
 /// - If file has no name
 /// - If extension does not match exactly
-pub fn base_name_from_file_with_ext<P: AsRef<Path>>(
-    path: P,
-    ext: &str,
-) -> ArcellaUtilsResult<String> {
-    let path = path.as_ref();
-    let file_name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+pub fn base_name_strip_ext(path: impl AsRef<Path>, ext: &str) -> ArcellaUtilsResult<String> {
+    let file_name = path.as_ref().file_name().and_then(OsStr::to_str).ok_or_else(|| {
         ArcellaUtilsError::InvalidArgument {
             message: "File has no valid UTF-8 name".into(),
         }
     })?;
-
-    let expected_suffix = format!(".{ext}");
-    if !file_name.ends_with(&expected_suffix) {
-        return Err(ArcellaUtilsError::InvalidArgument {
+    file_name
+        .strip_suffix(ext)
+        .and_then(|prefix| prefix.strip_suffix("."))
+        .filter(|prefix| !prefix.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| ArcellaUtilsError::InvalidArgument {
             message: format!("File '{file_name}' does not have extension '{ext}'"),
-        });
-    }
-    if file_name.len() <= expected_suffix.len() {
-        return Err(ArcellaUtilsError::InvalidArgument {
-            message: format!("Filename '{file_name}' is too short to have extension '{ext}'"),
-        });
-    }
-
-    let base = &file_name[..file_name.len() - expected_suffix.len()];
-    if base.is_empty() {
-        return Err(ArcellaUtilsError::InvalidArgument {
-            message: "Base name before extension is empty".into(),
-        });
-    }
-
-    Ok(base.to_string())
+        })
 }
 
 /// Validates that a base name (e.g., module name, deployment ID) contains only safe characters.
@@ -323,15 +336,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_base_name_from_file_with_ext() {
-        assert_eq!(base_name_from_file_with_ext("app.wasm", "wasm").unwrap(), "app");
+    fn test_base_name_strip_ext() {
+        assert_eq!(base_name_strip_ext("app.wasm", "wasm").unwrap(), "app");
         assert_eq!(
-            base_name_from_file_with_ext("hello-world@1.0.0.deployment.toml", "deployment.toml")
-                .unwrap(),
+            base_name_strip_ext("hello-world@1.0.0.deployment.toml", "deployment.toml").unwrap(),
             "hello-world@1.0.0"
         );
-        assert!(base_name_from_file_with_ext("bad.txt", "wasm").is_err());
-        assert!(base_name_from_file_with_ext(".wasm", "wasm").is_err());
+        assert!(base_name_strip_ext("bad.txt", "wasm").is_err());
+        assert!(base_name_strip_ext(".wasm", "wasm").is_err());
     }
 
     #[test]

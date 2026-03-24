@@ -41,7 +41,11 @@ use toml::value::Table;
 use crate::{
     ArcellaError,
     ArcellaResult,
-    utils::{fs as fs_utils, toml::parse_and_collect, types::TomlFileData},
+    utils::{
+        fs::{self as fs_utils, AppDirs},
+        toml::parse_and_collect,
+        types::TomlFileData,
+    },
 };
 
 mod config_loader;
@@ -331,41 +335,41 @@ struct ResolvedValue {
 ///
 /// Returns the final `ArcellaConfig` and any non-fatal warnings collected during loading.
 pub async fn load() -> ArcellaResult<(ArcellaConfig, Vec<ConfigLoadWarning>)> {
-    // 1. Find base_dir
-    let base_dir = fs_utils::find_base_dir().await?;
+    let exe_path = std::env::current_exe().ok();
+    let AppDirs {
+        base: base_dir,
+        config: config_dir,
+    } = fs_utils::get_app_dirs(exe_path.as_ref())?;
 
-    // 2. Set config_dir
-    let config_dir = base_dir.join("config");
-
-    // 3. Ensure config_dir and main config exist
+    // Ensure config_dir and main config exist
     let (main_config_path, warnings) = ensure_main_config_exists(&config_dir).await?;
 
-    // 4. Prepare paths for integrity checking (currently only main config)
+    // Prepare paths for integrity checking (currently only main config)
     let integrity_check_paths = vec![main_config_path.clone()];
     let integrity_checker = IntegrityChecker::new(integrity_check_paths)?;
 
-    // 5. Initialize loading state
+    // Initialize loading state
     let mut state = ConfigLoadState {
         config_files: IndexSet::new(),
         visited_paths: HashSet::new(),
         warnings,
     };
 
-    // 6. Register built-in default config
+    // Register built-in default config
     let (file_idx, _) = state.config_files.insert_full(PathBuf::from(DEFAULT_CONFIG_FILENAME));
     let (default_config, _) =
         parse_and_collect(DEFAULT_CONFIG_CONTENT, &["arcella".to_string()], file_idx)?;
 
-    // 7. Set up loading parameters
+    // Set up loading parameters
     let params = ConfigLoadParams {
         prefix: vec!["arcella".to_string()],
         config_dir: config_dir.clone(),
     };
 
-    // 8. Load main config and all included files recursively
+    // Load main config and all included files recursively
     let configs = load_config_recursive_from_file(&params, &mut state, &main_config_path).await?;
 
-    // 9. Merge configuration layers
+    // Merge configuration layers
     let mut final_values = merge_config(
         &default_config,
         &configs,
@@ -374,9 +378,8 @@ pub async fn load() -> ArcellaResult<(ArcellaConfig, Vec<ConfigLoadWarning>)> {
         &mut state.warnings,
     )?;
 
-    // 10. Sort keys for deterministic output
+    // Sort keys for deterministic output
     final_values.sort_keys();
-
 
     integrity_checker.check().await?;
 

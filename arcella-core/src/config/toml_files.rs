@@ -9,6 +9,7 @@
 
 use std::{
     collections::HashSet,
+    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
@@ -36,39 +37,24 @@ use crate::{ArcellaError, ArcellaResult};
 /// # Returns
 ///
 /// `true` if the path is a valid TOML file according to the criteria, `false` otherwise.
-pub fn is_valid_toml_file_path(path: &Path) -> bool {
-    // 1. Get the file name if it exists
-    let Some(file_name) = path.file_name() else {
-        return false;
-    };
-
-    // 2. Convert to string, but only if it's valid UTF-8 and ASCII
-    let file_name = match file_name.to_str() {
-        // TODO: In future, we might want to allow non-ASCII names
-        Some(s) if s.is_ascii() => s,
-        _ => return false, // Reject non-UTF8 or non-ASCII names
-    };
-
-    // 3. Defensive: reject names containing ".."
-    if file_name.contains("..") {
+pub fn is_valid_toml_file_path(path: impl AsRef<Path>) -> bool {
+    let path = path.as_ref();
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
         return false;
     }
 
-    // 4. Case-insensitive ASCII check for extensions
-    let lower = file_name.to_ascii_lowercase();
-
-    // 5. Must end with ".toml"
-    if !lower.ends_with(".toml") {
+    let is_toml = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("toml"));
+    if !is_toml {
         return false;
     }
 
-    // 6. Must NOT end with ".template.toml"
-    if lower.ends_with(TEMPLATE_TOML_SUFFIX) {
-        return false;
-    }
-
-    // If all checks pass, it's a valid TOML config file
-    true
+    path.file_name().and_then(OsStr::to_str).is_some_and(|file_name| {
+        if file_name.len() < TEMPLATE_TOML_SUFFIX.len() {
+            return true;
+        }
+        let (_, suffix) = file_name.split_at(file_name.len() - TEMPLATE_TOML_SUFFIX.len());
+        !suffix.eq_ignore_ascii_case(TEMPLATE_TOML_SUFFIX)
+    })
 }
 
 /// Finds all `.toml` files in a given directory, excluding `.template.toml` files.
