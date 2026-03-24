@@ -85,11 +85,11 @@ pub fn get_app_dirs(exe_path: Option<&impl AsRef<Path>>) -> ArcellaUtilsResult<A
             })
         })
         .or_else(|| {
-            let home_base = || dirs::home_dir().map(|h| h.join("myapp"));
-            let config = dirs::config_dir().map(|dir| dir.join("myapp"));
+            let home_base = || dirs::home_dir().map(|h| h.join(".arcella"));
+            let config = dirs::config_dir().map(|dir| dir.join("arcella"));
 
             if let Some(config) = config {
-                let base = dirs::data_dir().map(|dir| dir.join("myapp")).or_else(home_base)?;
+                let base = dirs::data_dir().map(|dir| dir.join("arcella")).or_else(home_base)?;
                 Some(AppDirs { base, config })
             } else {
                 let base = home_base()?;
