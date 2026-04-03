@@ -27,7 +27,7 @@ tracing-subscriber = { workspace = true }
 name = "integration_tests"
 
 [dev-dependencies]
-indexmap = "2.12.0"
+indexmap = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 wasmtime-wasi = { workspace = true }
