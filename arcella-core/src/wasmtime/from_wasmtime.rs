@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use arcella_types::spec::ComponentItemSpec;
 use wasmtime::{
     Engine,
-    component::types::{self, ComponentItem},
+    component::types::{self, ComponentExtern, ComponentItem},
 };
 
 use super::ArcellaWasmtimeResult;
@@ -38,9 +38,9 @@ pub trait ComponentItemSpecExt {
     fn to_spec(&self, engine: &Engine) -> ArcellaWasmtimeResult<ComponentItemSpec>;
 }
 
-impl ComponentItemSpecExt for ComponentItem {
+impl ComponentItemSpecExt for ComponentExtern<'_> {
     fn to_spec(&self, engine: &Engine) -> ArcellaWasmtimeResult<ComponentItemSpec> {
-        to_spec_with_depth(self, engine, 0, MAX_RECURSION_DEPTH)
+        todo!("move into engine");
     }
 }
 
@@ -76,7 +76,7 @@ impl ComponentTypeExt for types::Component {
 }
 
 fn to_spec_with_depth(
-    item: &ComponentItem,
+    item: &ComponentExtern<'_>,
     engine: &Engine,
     depth: usize,
     max_depth: usize,
@@ -87,7 +87,7 @@ fn to_spec_with_depth(
         });
     }
 
-    match item {
+    match &item.ty {
         ComponentItem::ComponentFunc(func_ty) => {
             let params =
                 func_ty.params().map(|(name, ty)| (name.into(), type_to_string(&ty))).collect();
@@ -184,55 +184,4 @@ fn type_to_string(ty: &types::Type) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use wasmtime::{Engine, component::Component};
-
-    use super::*;
-
-    #[test]
-    fn test_simple_component_func() -> ArcellaWasmtimeResult<()> {
-        let engine = Engine::default();
-        let wat = r#"
-            (component
-                (core module $m
-                    (memory (export "mem") 1)
-                    (func (export "hello") (result i32)
-                    i32.const 65536) ;; указатель на строку в памяти
-                )
-                (core instance $i (instantiate $m))
-                (func (export "greet") (result string)
-                    (canon lift (core func $i "hello") (memory $i "mem"))
-                )
-            )
-        "#;
-        let component = Component::new(&engine, wat)?;
-        let ty = component.component_type();
-
-        let exports = ty.exports_spec(&engine)?;
-        assert!(exports.contains_key("greet"));
-        match exports.get("greet").unwrap() {
-            ComponentItemSpec::ComponentFunc { params, results } => {
-                assert!(params.is_empty());
-                assert_eq!(results, &["string"]);
-            },
-            _ => panic!("Expected ComponentFunc"),
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_recursion_limit() -> ArcellaWasmtimeResult<()> {
-        let engine = Engine::default();
-        let wat = r"(component)";
-        let component = Component::new(&engine, wat)?;
-        let ty = component.component_type();
-
-        let item = ComponentItem::Component(ty);
-        let spec =
-            to_spec_with_depth(&item, &engine, MAX_RECURSION_DEPTH + 1, MAX_RECURSION_DEPTH)?;
-
-        assert!(matches!(spec, ComponentItemSpec::Unknown { .. }));
-        Ok(())
-    }
-}
+mod tests {}

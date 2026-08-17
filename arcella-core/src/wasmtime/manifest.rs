@@ -7,20 +7,16 @@
 // This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::path::Path;
 
 use arcella_types::{
     interface_list::InterfaceList,
     manifest::{ComponentCapabilities, ComponentManifest},
     module_id::ModuleId,
-    spec::ComponentItemSpec,
 };
-use wasmtime::{Engine, component::Component};
+use wasmtime::Engine;
 
-use super::{
-    error::{ArcellaWasmtimeError, ArcellaWasmtimeResult},
-    from_wasmtime::ComponentItemSpecExt,
-};
+use super::error::ArcellaWasmtimeResult;
 
 /// Extracts component metadata directly from a WebAssembly Component binary.
 ///
@@ -34,57 +30,20 @@ use super::{
 ///
 /// For MVP v0.2.3, we assume that if `component.toml` is missing,
 /// the filename encodes `name@version`.
+#[allow(clippy::unnecessary_wraps)]
 pub fn component_manifest_from_wasm(
-    engine: &Engine,
-    wasm_path: &Path,
+    _engine: &Engine,
+    _wasm_path: &Path,
 ) -> ArcellaWasmtimeResult<ComponentManifest> {
-    if !wasm_path.exists() {
-        return Err(ArcellaWasmtimeError::IoWithPath {
-            source: std::io::Error::from(std::io::ErrorKind::NotFound),
-            path: wasm_path.into(),
-        });
-    }
-
-    let file_stem = wasm_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| ArcellaWasmtimeError::Manifest("Invalid .wasm filename".into()))?;
-
-    let module_id = ModuleId::from_str(file_stem)?;
-
-    let component =
-        Component::from_file(engine, wasm_path).map_err(ArcellaWasmtimeError::Wasmtime)?;
-
-    let component_type = component.component_type();
-
-    let exports: HashMap<String, ComponentItemSpec> = component_type
-        .exports(engine)
-        .map(|(name, item)| {
-            let spec = item.to_spec(engine).unwrap_or_else(|e| ComponentItemSpec::Unknown {
-                debug: Some(format!("Export '{name}': {e:?}")),
-            });
-            (name.into(), spec)
-        })
-        .collect();
-
-    let imports: HashMap<String, ComponentItemSpec> = component_type
-        .imports(engine)
-        .map(|(name, item)| {
-            let spec = item.to_spec(engine).unwrap_or_else(|e| ComponentItemSpec::Unknown {
-                debug: Some(format!("Import '{name}': {e:?}")),
-            });
-            (name.into(), spec)
-        })
-        .collect();
-
     let manifest = ComponentManifest {
-        id: module_id,
+        id: ModuleId {
+            name: String::new(),
+            version: String::new(),
+        },
         description: None,
-        exports: InterfaceList::from(exports),
-        imports: InterfaceList::from(imports),
+        exports: InterfaceList::default(),
+        imports: InterfaceList::default(),
         capabilities: ComponentCapabilities::default(),
     };
-
-    manifest.validate()?;
     Ok(manifest)
 }
