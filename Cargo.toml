@@ -25,26 +25,26 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 derive_builder = "0.20"
 dirs = "6"
-futures = "0.3.31"
-indexmap = "2.13.1"
+futures = "0.3.34"
+indexmap = "2.14.0"
 ordered-float = { version = "5.3.0", features = ["serde"] }
-regex = "1.12.2"
+regex = "1.13.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3.27.0"
-time = { version = "0.3.47", features = ["formatting", "std"] }
-thiserror = "2.0.18"
+time = { version = "0.3.55", features = ["formatting", "std"] }
+thiserror = "2.0.20"
 tokio = { version = "1", features = ["signal", "rt-multi-thread", "net", "io-util", "fs", "macros", "time"] }
-toml = "1.1.2+spec-1.1.0"
-toml_edit = "0.25.10+spec-1.1.0"
+toml = "1.1.4+spec-1.1.0"
+toml_edit = "0.25.13+spec-1.1.0"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json", "serde"] }
-uuid = { version = "1.23", features = ["v4", "fast-rng"] }
+uuid = { version = "1.24", features = ["v4", "fast-rng"] }
 # walmq = "0.0.1"
-wasmtime = "43.0"
-wasmtime-wasi = "43.0"
-wat = "1.246"
+wasmtime = "47.0"
+wasmtime-wasi = "47.0"
+wat = "1.256"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
